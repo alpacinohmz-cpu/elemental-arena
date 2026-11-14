@@ -291,46 +291,52 @@ function prop(name, parent, x, y, z, { h, w, rot = 0, sy = 1 } = {}) {
 
 // ---------------------------------------------------------------- FLIPBOOK VFX (video-based effects, pooled)
 const FB_VS = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`;
-const FB_FS = `uniform sampler2D map; uniform float frame; uniform float grid; uniform vec3 tint; uniform float opacity; varying vec2 vUv;
-void main(){ float f=floor(frame); vec2 cell=vec2(mod(f,grid), grid-1.-floor(f/grid)); vec4 c=texture2D(map,(cell+clamp(vUv,.004,.996))/grid); float a=c.a*opacity; if(a<.01) discard; gl_FragColor=vec4(c.rgb*tint,a); }`;
+const FB_FS = `uniform sampler2D map; uniform float frame; uniform float grid; uniform vec3 tint; uniform float opacity; uniform float desat; uniform float loopf; varying vec2 vUv;
+vec4 cellc(float f){ vec2 cell=vec2(mod(f,grid), grid-1.-floor(f/grid)); return texture2D(map,(cell+clamp(vUv,.004,.996))/grid); }
+void main(){ float f=floor(frame), n=grid*grid; float g=f+1.; if(g>=n) g=loopf>.5?0.:f; vec4 c=mix(cellc(f),cellc(g),fract(frame)); float a=c.a*opacity; if(a<.01) discard; vec3 col=mix(c.rgb,vec3(dot(c.rgb,vec3(.3,.59,.11))),desat); gl_FragColor=vec4(col*tint,a); }`;
 const FLIP = { tex: {}, active: [], pool: [], geo: null };
-const FLIP_DEF = { // name: [additive, fps]
-  fire_loop: [1, 18], fire_burst: [1, 26], explosion: [0, 22], water_wave: [1, 18], water_splash: [1, 24],
-  tornado: [0, 16], bolt: [1, 30], lightning_orb: [1, 20], lightning_beam: [1, 24],
+const FLIP_DEF = { // name: [additive, fps] — every atlas is cut from the user's videos
+  fire_loop: [1, 18], fireball: [1, 20], fire_burst: [1, 26], explosion: [0, 22], fire_wall: [1, 18], fire_ring: [1, 20],
+  water_orb: [1, 16], water_splash: [0, 24], water_wave: [1, 18], water_vortex: [1, 18], water_stream: [1, 20],
+  tornado: [0, 16], dust_tornado: [0, 14], dust_puff: [0, 18], dust_wave: [0, 18],
+  rock_burst: [0, 20], crater: [0, 14], rocks_float: [0, 12],
+  lightning_orb: [1, 22], bolt: [1, 30], bolt_branch: [1, 26], lightning_beam: [1, 24],
 };
 function loadFlipbooks(onP, only) {
   const L = new THREE.TextureLoader(); const names = only || Object.keys(FLIP_DEF).filter(n => !FLIP.tex[n]); let done = 0; if (!names.length) { onP(1); return Promise.resolve(); }
-  return Promise.all(names.map(n => new Promise(res => L.load(`assets/vfx/${n}.webp`, t => { t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = true; FLIP.tex[n] = t; onP(++done / names.length); res(); }, undefined, () => { onP(++done / names.length); res(); }))));
+  return Promise.all(names.map(n => new Promise(res => L.load(`assets/vfx/${n}${SETTINGS.quality === 'high' ? '_hi' : ''}.webp`, t => { t.colorSpace = THREE.SRGBColorSpace; t.generateMipmaps = true; FLIP.tex[n] = t; onP(++done / names.length); res(); }, undefined, () => { onP(++done / names.length); res(); }))));
 }
 function fbMesh() {
   if (!FLIP.geo) FLIP.geo = new THREE.PlaneGeometry(1, 1);
-  const m = new THREE.Mesh(FLIP.geo, new THREE.ShaderMaterial({ uniforms: { map: { value: null }, frame: { value: 0 }, grid: { value: 4 }, tint: { value: new THREE.Color(1, 1, 1) }, opacity: { value: 1 } }, vertexShader: FB_VS, fragmentShader: FB_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  const m = new THREE.Mesh(FLIP.geo, new THREE.ShaderMaterial({ uniforms: { map: { value: null }, frame: { value: 0 }, grid: { value: 4 }, tint: { value: new THREE.Color(1, 1, 1) }, opacity: { value: 1 }, desat: { value: 0 }, loopf: { value: 0 } }, vertexShader: FB_VS, fragmentShader: FB_FS, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
   m.frustumCulled = false; m.renderOrder = 6; return m;
 }
 // opts: pos, size (number or [w,h]), dur, loop, life, mode ('bill'|'up'|'flat'|'dir'), dir (V3 for 'dir'), follow(fn->V3), tint, opacity, fade, scene, speed, grow, rot
 function fb(name, o = {}) {
   const tex = FLIP.tex[name]; if (!tex) return null;
   const m = FLIP.pool.pop() || fbMesh(); const def = FLIP_DEF[name];
-  const u = m.material.uniforms; u.map.value = tex; u.tint.value.set(o.tint ?? 0xffffff); if (o.boost) u.tint.value.multiplyScalar(o.boost); u.opacity.value = o.opacity ?? 1;
-  m.material.blending = def[0] ? THREE.AdditiveBlending : THREE.NormalBlending; m.material.needsUpdate = true;
+  const u = m.material.uniforms; u.map.value = tex; u.tint.value.set(o.tint ?? 0xffffff); if (o.boost) u.tint.value.multiplyScalar(o.boost); u.opacity.value = o.opacity ?? 1; u.desat.value = o.desat || 0; u.loopf.value = o.loop ? 1 : 0;
+  const bl = def[0] ? THREE.AdditiveBlending : THREE.NormalBlending; if (m.material.blending !== bl) { m.material.blending = bl; m.material.needsUpdate = true; }
   const sz = Array.isArray(o.size) ? o.size : [o.size || 2, o.size || 2]; m.scale.set(sz[0], sz[1], 1);
   const h = { m, name, t: 0, fps: (o.speed || 1) * def[1], loop: !!o.loop, life: o.life ?? (o.loop ? 1e9 : 16 / def[1] / (o.speed || 1)), mode: o.mode || 'bill', dir: o.dir, follow: o.follow, off: o.off || new V3(), base: sz, grow: o.grow || 0, fade: o.fade ?? .2, op: o.opacity ?? 1, rot: o.rot || 0, dead: false, anchorY: o.anchorY ?? 0 };
   if (o.pos) m.position.copy(o.pos);
   (o.scene || scene).add(m); h.scene = o.scene || scene; FLIP.active.push(h); fbOrient(h); return h;
 }
 function fbKill(h) { if (!h || h.dead) return; h.dead = true; h.scene.remove(h.m); FLIP.pool.push(h.m); }
+const _fbA = new V3(), _fbB = new V3();
 function fbOrient(h, cam = camera) {
   const m = h.m;
   if (h.mode === 'bill') { m.quaternion.copy(cam.quaternion); if (h.rot) m.rotateZ(h.rot); }
   else if (h.mode === 'up') { m.rotation.set(0, Math.atan2(cam.position.x - m.position.x, cam.position.z - m.position.z), 0); }
   else if (h.mode === 'flat') { m.rotation.set(-Math.PI / 2, 0, h.rot); }
+  else if (h.mode === 'beam' && h.dir) { m.quaternion.copy(cam.quaternion); const A = _fbA.copy(m.position).project(cam), B = _fbB.copy(m.position).add(h.dir).project(cam); m.rotateZ(Math.atan2(B.y - A.y, (B.x - A.x) * cam.aspect)); }
   else if (h.mode === 'dir' && h.dir) { const a = Math.atan2(h.dir.x, h.dir.z); m.rotation.set(0, a + Math.PI / 2, 0); }
 }
 function updateFlipbooks(dt, cam = camera) {
   for (let i = FLIP.active.length - 1; i >= 0; i--) {
     const h = FLIP.active[i]; if (h.dead) { FLIP.active.splice(i, 1); continue; }
     h.t += dt; const n = 16;
-    const f = h.loop ? (h.t * h.fps) % n : Math.min(n - 1, h.t * h.fps);
+    const f = h.loop ? (h.t * h.fps) % n : Math.min(n - 1.001, h.t * h.fps);
     h.m.material.uniforms.frame.value = f;
     if (h.follow) { const p = h.follow(); if (p) h.m.position.copy(p).add(h.off); else h.life = Math.min(h.life, h.t + h.fade); }
     if (h.grow) { const g = 1 + h.grow * h.t; h.m.scale.set(h.base[0] * g, h.base[1] * g, 1); }
@@ -1017,6 +1023,8 @@ def('r_quake', { el: 'earth', anim: 'stomp', dur: 1.4, rel: .35, cd: 1, power: 3
 
 // moves: [ability, ai-cooldown, ai-weight, min range, max range]
 const RAVEN_KITS = {};
+// mobility per element (as in the first version): wind is the most agile, earth the heaviest
+const MOBILITY = { fire: { speed: 1, airJumps: 1, glide: false, jumpP: .3 }, water: { speed: .95, airJumps: 1, glide: false, jumpP: .3 }, wind: { speed: 1.12, airJumps: 2, glide: true, jumpP: .55 }, earth: { speed: .88, airJumps: 0, glide: false, jumpP: .12 }, lightning: { speed: 1.06, airJumps: 1, glide: false, jumpP: .35 } };
 // AI usage per element: [min range, max range, weight]; pref = preferred distance
 const AI_USE = { fire: { s1: [2, 22, 3], s2: [0, 5.2, 3], su: [0, 15], pref: 4.5 }, water: { s1: [1.2, 6.6, 3], s2: [2, 15, 2], su: [2, 14], pref: 5.5 }, earth: { s1: [3, 18, 3], s2: [6, 22, .4], su: [0, 14], pref: 6.5 }, wind: { s1: [2, 18, 3], s2: [0, 6.6, 2.6], su: [3, 14], pref: 6 }, lightning: { s1: [2, 24, 3], s2: [2, 12.5, 2.2], su: [3, 20], pref: 9 } };
 function buildRavenKits() {
@@ -1025,7 +1033,7 @@ function buildRavenKits() {
     RAVEN_KITS[el] = { name: EL[el].name, basic: el, btn: [[el, EL[el].name + ' Attack'], [el + '_s1', B.s1.name], [el + '_s2', B.s2.name]], superAb: el + '_su', superR: U.su,
       desc: `<b>${B.s1.name}</b> · <b>${B.s2.name}</b> · Super: <b>${B.su.name}</b><br>Perk: ${PERK_TEXT[el]}`,
       moves: [[el, .15, 4, 2, 20], [el + '_s1', .5, U.s1[2], U.s1[0], U.s1[1]], [el + '_s2', .8, U.s2[2], U.s2[0], U.s2[1]]],
-      pref: U.pref, speed: BAL.moveSpeed, aggr: .75, blockP: .45, jumpP: .25, airJumps: 1, glide: false, armor: 1, heal: 0 };
+      pref: U.pref, speed: BAL.moveSpeed * MOBILITY[el].speed, aggr: .75, blockP: .45, jumpP: MOBILITY[el].jumpP, airJumps: MOBILITY[el].airJumps, glide: MOBILITY[el].glide, armor: 1, heal: 0 };
   }
 }
 const MASTER_KIT = { name: 'All', desc: 'Commands all five elements and fuses any two into a combined technique. Double jump, glide and dash. Super: <b>Avatar State</b>. Shield: a fused five-element barrier — reflects, deflects, burns and shocks.',
@@ -1070,7 +1078,8 @@ function killProj(p, fx = true) {
   }
   if (fx && p.kind === 'ball') {
     const small = p.vis === 'pebble' || p.vis === 'ice' || p.vis === 'shard';
-    FX.burst(p.pos, p.el, small ? 8 : 22, 5, small ? .5 : 1);
+    impactFX(p.el, p.pos, p.dmg >= 45 || p.big, small ? .6 : 1);
+    FX.burst(p.pos, p.el, small ? 5 : 12, 5, small ? .5 : .8);
     if (p.vis === 'rock' || p.vis === 'railrock') for (let i = 0; i < 10; i++) DEBRIS.spawn(p.pos, _v1.randomDirection().multiplyScalar(rand(3, 8)).setY(rand(2, 7)), rand(.8, 2));
   }
 }
@@ -1082,6 +1091,7 @@ function spawnBall(f, t, o) {
   if (o.trail) p.fbh = [fb(o.trail, { follow: () => p.dead ? null : p.pos, size: o.trailSize || 1.4, loop: true })];
   if (p.rise) { p.riseFrom = p.pos.y; p.riseT = 0; }
   p.mesh = visMesh(p.vis, p.el); if (p.mesh) p.mesh.position.copy(p.pos);
+  if (!o.noFx) projFX(p);
   PROJ.push(p); return p;
 }
 function spawnTornado(f, t, o) { const p = Object.assign({ kind: 'tornado', owner: f, target: t, t: 0, power: AB_CUR_POWER, tickT: 0 }, o); p.pos = frontPos(f, 1.4, 0); p.pos.y = f.pos.y; p.dir = aimDir(f, p.pos, t).setY(0).normalize(); PROJ.push(p); return p; }
@@ -1153,7 +1163,7 @@ function spawnGeyser(f, t, dmg = 12) {
     m.position.copy(pos); scene.add(m);
     TWEENS.push({ t: 0, d: .9, f: k => { const up = k < .2 ? easeOut(k / .2) : 1; m.scale.set(1 + Math.sin(k * 40) * .05, Math.max(.01, up * (k > .7 ? 1 - (k - .7) / .3 : 1)), 1 + Math.cos(k * 40) * .05); m.position.y = pos.y + 2.25 * m.scale.y; m.material.opacity = .75 * (k > .7 ? 1 - (k - .7) / .3 : 1); m.rotation.y += .2; }, end: () => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); } });
     for (let i = 0; i < 60; i++) PADD.emit(pos.x + rand(-.6, .6), pos.y + rand(0, 1), pos.z + rand(-.6, .6), rand(-2, 2), rand(8, 16), rand(-2, 2), .35, .8, 1.7, rand(.2, .45), rand(.5, 1), 14, .3, .05);
-    FX.burst(pos.clone().setY(pos.y + .3), 'water', 20, 5, 1.2); Sfx.play('water'); shake(.3);
+    FX.burst(pos.clone().setY(pos.y + .3), 'water', 12, 5, 1.2); Sfx.play('water'); shake(.3); fb('water_splash', { pos: pos.clone().setY(pos.y + 1.6), size: [2.6, 4], mode: 'up', speed: 1.2 }); fb('water_vortex', { pos: pos.clone().setY(pos.y + .1), size: 3, speed: 1.6 });
     if (Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.5 && t.pos.y - pos.y < 2) applyHit(f, t, { dmg, kb: 1, launch: 9, el: 'water', from: pos, heavy: true });
   });
 }
@@ -1166,14 +1176,15 @@ function spikeLine(f, t, dmg = 12) {
     const g = new THREE.Group(); g.position.copy(pos); scene.add(g);
     for (let k = 0; k < 3; k++) { const c = M(new THREE.ConeGeometry(.32 - k * .06, 1.9 - k * .4, 6), MATS.rocks[k % 2], rand(-.35, .35), 0, rand(-.35, .35), g); c.rotation.set(rand(-.3, .3), rand(0, 6), rand(-.3, .3)); }
     TWEENS.push({ t: 0, d: 1.0, f: k => { g.position.y = pos.y + (k < .12 ? lerp(-1.6, 0, k / .12) : k > .65 ? lerp(0, -1.8, (k - .65) / .35) : 0); }, end: () => scene.remove(g) });
-    FX.earth(pos.clone().setY(pos.y + .2), 6, .5); if (i % 2 === 0) { Sfx.play('earth'); decal(pos, 'crack', 1.6); }
+    FX.earth(pos.clone().setY(pos.y + .2), 4, .5); if (i % 2 === 0) { Sfx.play('earth'); decal(pos, 'crack', 1.6); fb('dust_puff', { pos: pos.clone().setY(pos.y + .5), size: 2, speed: 1.6, opacity: .8 }); }
     if (!hit && Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.2 && t.pos.y - pos.y < 1.3) { hit = true; applyHit(f, t, { dmg, kb: 3, launch: 8, el: 'earth', from: pos, heavy: true }); }
   });
   shake(.3);
 }
 function waterWhip(f, t, side = 'R', dmg = 9) {
   const from = handPos(f, side), to = t.pos.clone().setY(t.pos.y + 1); const dir = to.clone().sub(from).normalize(); const len = Math.min(from.distanceTo(to), 7);
-  for (let i = 0; i < 40; i++) { _v1.copy(from).addScaledVector(dir, i / 40 * len); _v1.y += Math.sin(i * .5) * .15; PADD.emit(_v1.x, _v1.y, _v1.z, rand(-.3, .3), rand(-.3, .3), rand(-.3, .3), .3, .75, 1.7, rand(.25, .4), rand(.25, .4), 3, 1, .05); }
+  fb('water_stream', { pos: from.clone().addScaledVector(dir, len / 2), size: [len, 1.3], mode: 'beam', dir: dir.clone(), speed: 2.4 });
+  for (let i = 0; i < 12; i++) { _v1.copy(from).addScaledVector(dir, i / 12 * len); _v1.y += Math.sin(i * .5) * .15; PADD.emit(_v1.x, _v1.y, _v1.z, rand(-.3, .3), rand(-.3, .3), rand(-.3, .3), .3, .75, 1.7, rand(.25, .4), rand(.25, .4), 3, 1, .05); }
   Sfx.play('water');
   const fwd = new V3(Math.sin(f.yaw), 0, Math.cos(f.yaw)); const flat = t.pos.clone().sub(f.pos).setY(0); const fd = flat.length(); flat.normalize();
   if (fd < 7.1 && fwd.dot(flat) > .55) applyHit(f, t, { dmg, kb: -6, el: 'water', from: f.pos, pull: true });
@@ -1245,6 +1256,7 @@ function blink(f, t) {
   f.pos.copy(dest); f.vel.set(0, 0, 0); f.invuln = Math.max(f.invuln, .25); f.onGround = true; Sfx.play('lightning');
 }
 function thunderStrikes(f, t, n, gap, dmg, stun, spread = 0, extra = {}) {
+  const _bb = 1;
   const cid = f.castId;
   for (let i = 0; i < n; i++) later(i * gap, () => {
     if (game.state !== 'fight' && game.state !== 'ko') return;
@@ -1255,7 +1267,7 @@ function thunderStrikes(f, t, n, gap, dmg, stun, spread = 0, extra = {}) {
       const top = pos.clone().add(new V3(rand(-2, 2), 22, rand(-2, 2)));
       boltFX(top, pos, 0xd8ccff, .28, .3, 1.2); boltFX(top, pos, 0x8a70ff, .12, .35, 1.6);
       FX.burst(pos.clone().setY(pos.y + .3), 'lightning', 16, 6, 1.2); Sfx.play('thunder'); shake(.35); flashSky();
-      if (Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.4 && t.pos.y - pos.y < 2.6) applyHit(f, t, Object.assign({ dmg, kb: 2, launch: 0, stun, el: 'lightning', from: pos.clone().setY(pos.y + 3), heavy: true, skill: true, castId: cid }, extra)); fb('bolt', { pos: pos.clone().setY(pos.y + 2.4), size: [2, 5] });
+      if (Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.4 && t.pos.y - pos.y < 2.6) applyHit(f, t, Object.assign({ dmg, kb: 2, launch: 0, stun, el: 'lightning', from: pos.clone().setY(pos.y + 3), heavy: true, skill: true, castId: cid }, extra)); fb('bolt_branch', { pos: pos.clone().setY(pos.y + 3), size: [3.2, 6], mode: 'up', speed: 1.6, boost: 1.3 }); fb('lightning_orb', { pos: pos.clone().setY(pos.y + .4), size: 2.2, speed: 2 });
     });
   });
 }
@@ -1279,14 +1291,15 @@ function updateProjectiles(dt) {
         if (p.vis === 'water') { const s = 1 + Math.sin(p.t * 30) * .12; p.mesh.scale.set(s, 2 - s, s); }
       }
       const e = p.el;
-      if (p.vis === 'fire') FX.fire(p.pos, 3, .15, _v1.copy(p.dir).multiplyScalar(-2));
-      else if (p.vis === 'water') FX.water(p.pos, 2, .2, _v1.copy(p.dir).multiplyScalar(-3));
-      else if (p.vis === 'wind') FX.wind(p.pos, 2, .4, _v1.copy(p.dir).multiplyScalar(-3));
+      // the filmed flipbook is the projectile; code particles are only tiny accents (embers, droplets)
+      if (p.vis === 'fire') { if (Math.random() < .6) PADD.emit(p.pos.x + rand(-.15, .15), p.pos.y + rand(-.15, .15), p.pos.z + rand(-.15, .15), -p.dir.x * 2 + rand(-1, 1), rand(0, 1.5), -p.dir.z * 2 + rand(-1, 1), 2, rand(.5, .9), .15, rand(.06, .12), rand(.3, .6), -1, 0, .05); }
+      else if (p.vis === 'water') { if (Math.random() < .5) PADD.emit(p.pos.x, p.pos.y, p.pos.z, -p.dir.x * 2 + rand(-1, 1), rand(-1, 1), -p.dir.z * 2 + rand(-1, 1), .5, .85, 1.6, rand(.05, .1), rand(.3, .5), 6, 0, .05); }
+      else if (p.vis === 'wind') { }
       else if (p.vis === 'rock') { if (Math.random() < .5) FX.earth(p.pos, 1, .3, null, .6); }
       else if (p.vis === 'ice') { if (Math.random() < .5) PADD.emit(p.pos.x, p.pos.y, p.pos.z, 0, 0, 0, .8, 1.3, 1.8, .2, .25, 0, 0, .02, .8); }
-      else if (p.vis === 'crescent') { FX.el(e, p.pos, p.big ? 7 : 2, p.big ? 1.1 : .5, _v1.copy(p.dir).multiplyScalar(-2), p.big ? 1.3 : .8); if (p.big && e === 'fire' && Math.random() < .3) decal(p.pos, 'scorch', 1.4); }
+      else if (p.vis === 'crescent') { if (p.big && e === 'fire' && Math.random() < .3) decal(p.pos, 'scorch', 1.4); }
       else if (p.vis === 'orb') FX.el(e, p.pos, 4, .35, _v1.copy(p.dir).multiplyScalar(-3), 1.3);
-      else if (p.vis === 'gale') FX.wind(p.pos, 5, 1.2, _v1.copy(p.dir).multiplyScalar(-4), 1.4);
+      else if (p.vis === 'gale') { }
       else if (p.vis === 'lance') { if (p.prev) { boltFX(p.prev, p.pos, 0xd8ccff, .16, .14, .3); boltFX(p.prev, p.pos, 0x8a70ff, .07, .16, .6); } FX.lightning(p.pos, 4, .3); }
       else if (p.vis === 'bolt' || p.vis === 'railrock') { if (p.prev) boltFX(p.prev, p.pos, 0xc8b8ff, p.vis === 'bolt' ? .06 : .09, .09, .25); if (Math.random() < .5) FX.lightning(p.pos, 2, .2); }
       else if (p.vis === 'ewater') { FX.water(p.pos, 2, .25, _v1.copy(p.dir).multiplyScalar(-3)); if (Math.random() < .35) boltFX(p.pos, _v2.copy(p.pos).add(_v3.randomDirection().multiplyScalar(.8)), 0xb59cff, .03, .08); }
@@ -1424,7 +1437,8 @@ function buildKits() {
   // water
   def('water_s1', { el: 'water', clip: 'magic2h', anim: 'push', hit: .3, speed: 1.7, dur: .75, cd: B.water.s1.cd, label: B.water.s1.name, fn(f, t) {
     const from = handPos(f, 'R'), fw = fwdOf(f), len = B.water.s1.range;
-    for (let i = 0; i < 46; i++) { const k = i / 46 * len; _v1.copy(from).addScaledVector(fw, k); _v1.y += Math.sin(i * .45) * .2; PADD.emit(_v1.x, _v1.y, _v1.z, rand(-.4, .4), rand(-.3, .5), rand(-.4, .4), .3, .78, 1.7, rand(.28, .45), rand(.25, .45), 3, 1, .05); }
+    fb('water_stream', { pos: from.clone().addScaledVector(fw, len / 2), size: [len, 1.6], mode: 'beam', dir: fw.clone(), speed: 2.2 });
+    for (let i = 0; i < 16; i++) { const k = i / 16 * len; _v1.copy(from).addScaledVector(fw, k); PADD.emit(_v1.x, _v1.y, _v1.z, rand(-.4, .4), rand(-.3, .5), rand(-.4, .4), .3, .78, 1.7, rand(.2, .35), rand(.2, .35), 3, 1, .05); }
     Sfx.play('water');
     if (coneHit(f, t, len, .34, B.water.s1.dmg, { kb: -4, el: 'water' })) fb('water_splash', { pos: t.pos.clone().setY(t.pos.y + 1.1), size: 2.6 });
   } });
@@ -1442,14 +1456,14 @@ function buildKits() {
     fn(f, t) { const P = f.suP, s = B.earth.su; const g = new THREE.Group(); g.position.copy(P); scene.add(g);
       for (let i = 0; i < 11; i++) { const a = i / 11 * Math.PI * 2, rr = i ? rand(.5, 1) * s.radius * .8 : 0; const c = M(new THREE.ConeGeometry(rand(.3, .5), rand(1.6, 2.8), 6), MATS.rocks[i % 2], Math.cos(a) * rr, 0, Math.sin(a) * rr, g); c.rotation.set(rand(-.35, .35), 0, rand(-.35, .35)); }
       TWEENS.push({ t: 0, d: 1.3, f: k => { g.position.y = P.y + (k < .1 ? lerp(-2.4, 0, k / .1) : k > .7 ? lerp(0, -2.6, (k - .7) / .3) : 0); }, end: () => scene.remove(g) });
-      FX.burst(P.clone().setY(P.y + .4), 'earth', 40, 8, 2); decal(P, 'crack', 6); Sfx.play('earth'); Sfx.play('explode'); shake(.8);
+      FX.burst(P.clone().setY(P.y + .4), 'earth', 24, 8, 2); decal(P, 'crack', 6); Sfx.play('earth'); Sfx.play('explode'); shake(.8); fb('crater', { pos: P.clone().setY(P.y + .3), size: 6, speed: .9 }); fb('dust_wave', { pos: P.clone().setY(P.y + .8), size: [8, 3.5], mode: 'up', speed: 1.2 }); fb('rock_burst', { pos: P.clone().setY(P.y + 1), size: 5 });
       if (Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 1.6) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 2, launch: 9, lift: true, el: 'earth', from: P, heavy: true })); } });
   // wind
   def('wind_s1', { el: 'wind', clip: 'kick2', anim: 'kick', hit: .22, speed: 1.8, dur: .58, cd: B.wind.s1.cd, label: B.wind.s1.name, fn(f, t) { spawnBall(f, t, SK(f, { el: 'wind', pos: frontPos(f, .9, 1.05), speed: 36, radius: .75, dmg: B.wind.s1.dmg, kb: 3, life: .9, vis: 'crescent' })); Sfx.play('wind'); } });
   def('wind_s2', { el: 'wind', clip: 'hurricane', anim: 'spin', hit: .32, speed: 1.6, dur: .85, cd: B.wind.s2.cd, label: B.wind.s2.name, fn(f, t) {
     const fw = fwdOf(f);
     for (let i = 0; i < 60; i++) { const a = rand(-.7, .7); const d = _v1.copy(fw).applyAxisAngle(_v2.set(0, 1, 0), a).multiplyScalar(rand(10, 18)); PADD.emit(f.pos.x, f.pos.y + rand(.3, 2), f.pos.z, d.x, rand(-.5, 1), d.z, .85, .92, 1, rand(.5, 1.1), rand(.3, .45), 0, 2.5, 1.3, .32); }
-    FX.shock(f.pos.clone().addScaledVector(fw, 2).setY(f.pos.y + 1), 'wind', 1.6); Sfx.play('wind');
+    FX.shock(f.pos.clone().addScaledVector(fw, 2).setY(f.pos.y + 1), 'wind', 1.6); Sfx.play('wind'); fb('dust_wave', { pos: f.pos.clone().addScaledVector(fw, 3).setY(f.pos.y + .6), size: [6, 3], mode: 'up', speed: 1.4, opacity: .8 }); for (let k = 1; k <= 3; k++) fb('water_vortex', { pos: f.pos.clone().addScaledVector(fw, k * 1.8).setY(f.pos.y + 1.1), size: 1.4 + k * .5, desat: 1, tint: 0xe8f4ff, opacity: .6, speed: 1.6 });
     coneHit(f, t, B.wind.s2.range, .7, B.wind.s2.dmg, { kb: B.wind.s2.push, launch: 2, el: 'wind', push: true });
   } });
   def('wind_su', { el: 'wind', clip: 'magic2h3', anim: 'spin', hit: 1.0, speed: 1.9, dur: 1.75, cd: 1, super: true, power: 3, label: B.wind.su.name, fn(f, t) { const s = B.wind.su; const ticks = Math.round(s.dur / .25); const p = spawnTornado(f, t, SK(f, { el: 'wind', speed: 4.2, life: s.dur, radius: 1.9, tick: s.dmg / ticks, tickRate: .25, pull: s.pull, big: true })); p.fbh = [fb('tornado', { follow: () => p.dead ? null : p.pos, off: new V3(0, 2.2, 0), size: [3.6, 5], loop: true, mode: 'up' })]; telegraph(p.pos, 1.9, 0xdff4ff, .4); Sfx.play('wind'); Sfx.play('explode'); } });
@@ -1463,8 +1477,8 @@ function buildKits() {
 
 // ---------------------------------------------------------------- KAZAN — Lord of Magma (legendary fighter; numbers from the user's sheet)
 BAL.chars = {
-  raven: { hp: BAL.hp, speedMul: 1, dashCD: BAL.dashCD, combo: BAL.combo, height: 1.85 },
-  kazan: { hp: 1050, speedMul: .95, dashCD: 6, combo: [30, 35, 55], height: 1.95,
+  raven: { hp: BAL.hp, speedMul: 1, dashCD: 1.2, combo: BAL.combo, height: 1.85 },
+  kazan: { hp: 1050, speedMul: .95, dashCD: 2, combo: [30, 35, 55], height: 1.95,
     heat: { max: 3, dur: 6, bonus: 20, slow: .15, slowDur: 2 },
     s1: { name: 'Magma Fist', dmg: 100, punch: 60, blast: 40, cd: 8, windup: .45, recover: .4, range: 2.8, blastR: 2.0 },
     s2: { name: 'Volcanic Fissure', dmg: 65, cd: 12, warn: .8, length: 11, width: 1.8, lavaDur: 3, lavaDps: 15 },
@@ -1573,8 +1587,52 @@ function kazanPerk(att, tgt, h, dmg) {
   if (h.skill && h.castId && att.heatCast !== h.castId) { att.heatCast = h.castId; att.heat = Math.min(KZ.heat.max, (att.heat || 0) + 1); att.heatT = KZ.heat.dur; popText(att.pos.clone().setY(att.pos.y + 2.4), 'HEAT ' + att.heat, '#ffb070', 18); }
 }
 
+// ---------------------------------------------------------------- ELEMENT VISUALS FROM VIDEO (cast → projectile → impact)
+const EFX = {
+  fire: { proj: 'fireball', projK: 4.4, hit: 'explosion', hit2: 'fire_burst', muzzle: 'fire_burst', charge: 'fire_loop' },
+  water: { proj: 'water_orb', projK: 3.2, hit: 'water_splash', muzzle: 'water_splash', charge: 'water_vortex' },
+  wind: { proj: 'water_vortex', projK: 3, desat: 1, tint: 0xe8f4ff, hit: 'dust_puff', muzzle: 'dust_puff', charge: 'tornado' },
+  earth: { proj: null, hit: 'rock_burst', hit2: 'dust_puff', muzzle: 'dust_puff', charge: 'rocks_float' },
+  lightning: { proj: 'lightning_orb', projK: 3.4, hit: 'bolt_branch', muzzle: 'lightning_orb', charge: 'lightning_orb' },
+};
+function projFX(p) { // replaces the code-drawn projectile with filmed fire / water / air / lightning
+  const v = p.vis, E = EFX[p.el] || EFX.fire, r = p.radius || .4, follow = () => p.dead ? null : p.pos;
+  let main = null;
+  if (v === 'fire' || (v === 'orb' && p.el === 'fire')) { main = fb('fireball', { follow, size: r * E.projK, loop: true, speed: 1.4, tint: 0xffa860, boost: .85 }); p.fbh = [fb('fire_loop', { follow, size: r * 3.2, loop: true, speed: 1.6, opacity: .8 })]; }
+  else if (v === 'water' || v === 'ewater') main = fb('water_orb', { follow, size: r * 3.2, loop: true, speed: 1.3, opacity: .95 });
+  else if (v === 'bolt') main = fb('lightning_orb', { follow, size: .95, loop: true, speed: 1.6, boost: 1.2 });
+  else if (v === 'lance') main = fb('lightning_orb', { follow, size: 1.5, loop: true, speed: 1.8, boost: 1.3 });
+  else if (v === 'wind') main = fb('water_vortex', { follow, size: r * 3, loop: true, speed: 1.8, desat: 1, tint: 0xe8f4ff, opacity: .8 });
+  else if (v === 'gale') main = fb('tornado', { follow, size: [r * 2.4, r * 3], loop: true, speed: 1.6, mode: 'up', opacity: .9 });
+  else if (v === 'crescent') main = p.el === 'fire' ? fb('fire_wall', { follow, size: [r * 3.4, r * 2.2], loop: true, speed: 1.4, mode: 'up' }) : fb('water_vortex', { follow, size: [r * 3, r * 1.4], loop: true, speed: 2, desat: p.el === 'wind' ? 1 : 0, tint: p.el === 'wind' ? 0xe8f4ff : 0xffffff, opacity: .85 });
+  else if (v === 'railrock') main = fb('fire_loop', { follow, size: 1.2, loop: true, speed: 1.5 });
+  if (main) { p.fbh = (p.fbh || []).concat([main]); if (p.mesh && v !== 'lance' && v !== 'railrock' && v !== 'crescent') p.mesh.visible = false; if (p.mesh && v === 'crescent') p.mesh.visible = false; }
+  if (v === 'ewater') p.fbh.push(fb('lightning_orb', { follow, size: .9, loop: true, speed: 2 }));
+}
+function impactFX(el, pos, heavy, big = 1) {
+  const E = EFX[el] || EFX.fire, s = (heavy ? 1.6 : 1) * big;
+  if (el === 'fire') { fb('explosion', { pos: _v4.copy(pos).setY(pos.y + .4 * s), size: 2.2 * s }); if (heavy) fb('fire_burst', { pos, size: 2.2 * s, boost: 1.1 }); }
+  else if (el === 'water') { fb('water_splash', { pos, size: 2.4 * s, speed: 1.4 }); }
+  else if (el === 'wind') { fb('dust_puff', { pos: _v4.copy(pos).setY(pos.y - .3), size: 2.4 * s, opacity: .75, speed: 1.6 }); }
+  else if (el === 'earth') { fb('rock_burst', { pos: _v4.copy(pos).setY(pos.y - .2), size: 2.6 * s }); fb('dust_puff', { pos, size: 2.2 * s, opacity: .8, speed: 1.5 }); }
+  else if (el === 'lightning') { fb('bolt_branch', { pos, size: 2 * s, speed: 1.8, boost: 1.2 }); fb('lightning_orb', { pos, size: 1.3 * s, speed: 2.5 }); }
+}
+function muzzleFX(f, el) {
+  const h = handPos(f, 'R'), E = EFX[el]; if (!E) return;
+  if (el === 'fire') fb('fire_burst', { pos: h, size: 1.1, speed: 2.2, boost: 1.1 });
+  else if (el === 'water') fb('water_splash', { pos: h, size: 1.2, speed: 2 });
+  else if (el === 'wind') fb('dust_puff', { pos: h, size: 1.2, speed: 2, opacity: .6 });
+  else if (el === 'earth') fb('dust_puff', { pos: f.pos.clone().addScaledVector(fwdOf(f), 1).setY(f.pos.y + .3), size: 1.6, speed: 1.8, opacity: .8 });
+  else if (el === 'lightning') fb('lightning_orb', { pos: h, size: .9, speed: 3 });
+}
+function chargeFX(f, el, dur) {
+  const follow = () => f.state === 'cast' ? handPos(f, 'R') : null, E = EFX[el]; if (!E || dur < .25) return;
+  if (el === 'earth') fb('rocks_float', { pos: f.pos.clone().setY(f.pos.y + .8), size: 1.8, speed: 1.4, life: dur, loop: true });
+  else if (el === 'wind') fb('tornado', { follow: () => f.state === 'cast' ? f.pos.clone().setY(f.pos.y + 1) : null, size: [1.8, 2.4], mode: 'up', loop: true, life: dur, opacity: .5 });
+  else fb(E.charge, { follow, size: el === 'water' ? 1 : .9, loop: true, life: dur, speed: 1.5, desat: 0 });
+}
 // ---------------------------------------------------------------- ELEMENT ATTACK — tap 3 times: 3 different ranged strikes (every fighter)
-BAL.basic = { dmg: [30, 30, 45], cd: [.42, .5, 1.0], chainWindow: 1.1 };
+BAL.basic = { dmg: [40, 40, 60], cd: [.36, .45, .9], chainWindow: 1.1, moveWhileCasting: .7 };
 function buildBasics() {
   const D = BAL.basic.dmg, C = BAL.basic.cd;
   const s1 = { clip: 'magic1h', hit: .16, speed: 2.6, dur: .4 }, s2 = { clip: 'magic2h', hit: .18, speed: 2.6, dur: .45 }, s3 = { hit: .26, speed: 2, dur: .62, power: 2 };
@@ -1645,6 +1703,7 @@ function applyHit(att, tgt, h) {
   if (h.slow) { tgt.slowT = Math.max(tgt.slowT, h.slow); tgt.slowPct = h.slowPct || .3; }
   if (h.stun) tgt.shockT = Math.max(tgt.shockT || 0, h.stun);
   FX.sparks(hitPos, EL[h.el || 'fire'].c, h.heavy ? 22 : 12, h.heavy ? 9 : 6); if (h.heavy) FX.shock(hitPos, h.el || 'fire', 1);
+  if (!h.proj && !h.multi) impactFX(h.el || 'fire', hitPos, h.heavy, .8);
   popDamage(hitPos, dmg, h.el); Sfx.play(h.heavy ? 'heavy' : 'hit');
   if (!h.multi) { hitstop(h.heavy ? .09 : .05); shake(h.heavy ? .45 : .2); }
   if (tgt === hero) vibrate(h.heavy ? 60 : 25);
@@ -1853,6 +1912,7 @@ class Fighter {
     this.cds[name] = a.cd; this.cast = { a, t: 0, fired: false }; this.setState('cast'); this.rig.shield.visible = false; this.castId = ++CAST_ID; this.bufAb = null;
     this.lastEl = a.el || this.lastEl;
     if (a.onStart) a.onStart(this, opp);
+    if (a.el && a.rel > .22) chargeFX(this, a.el, a.rel);
     if (a.label && (a.super || a.ult || this.isMaster)) popText(this.pos.clone().setY(this.pos.y + 2.4), a.label, '#ffe9a0', 24);
     if (a.ult || a.super) startCinematic(this, opp, a);
     return true;
@@ -1956,10 +2016,10 @@ class Fighter {
       }
       case 'cast': {
         const c = this.cast; c.t += dt;
-        this.vel.x = damp(this.vel.x, mvx * this.speed * .25, 10, dt); this.vel.z = damp(this.vel.z, mvz * this.speed * .25, 10, dt);
+        const cm = c.a.basic ? BAL.basic.moveWhileCasting : .25; this.vel.x = damp(this.vel.x, mvx * this.speed * cm, 10, dt); this.vel.z = damp(this.vel.z, mvz * this.speed * cm, 10, dt);
         if (!this.onGround && !c.a.ult) this.vel.y = Math.max(this.vel.y, -1.2);
         if (c.a.ult) { this.vel.y = (this.castBaseY + 2.6 - this.pos.y) * 4; this.onGround = false; this.vel.x *= .9; this.vel.z *= .9; ELS.forEach((e, i) => { const a = game.time * 4 + i * Math.PI / 2; FX.el(e, _v2.set(this.pos.x + Math.cos(a) * 1.4, this.pos.y + 1.1 + Math.sin(a * 1.3) * .3, this.pos.z + Math.sin(a) * 1.4), 2, .1, null, 1.1); }); this.invuln = .2; }
-        if (!c.fired && c.t >= c.a.rel) { c.fired = true; AB_CUR_POWER = c.a.power; c.a.fn(this, opp); AB_CUR_POWER = 1; }
+        if (!c.fired && c.t >= c.a.rel) { c.fired = true; AB_CUR_POWER = c.a.power; if (c.a.el && !c.a.noMuzzle) muzzleFX(this, c.a.el); c.a.fn(this, opp); AB_CUR_POWER = 1; }
         if (c.t >= (c.dur || c.a.dur)) { this.cast = null; this.setState(this.onGround ? 'idle' : 'air'); }
         break;
       }
@@ -2847,7 +2907,7 @@ function frame(rdt) {
   setupComposer(); onResize();
   $('#loadTxt').textContent = 'Preparing fighters…'; $('#loadBar').style.width = '96%'; await new Promise(r => setTimeout(r, 30));
   initLobby(); toLobby(); window.__booted = true;
-  loadFlipbooks(() => { }).then(() => setTimeout(() => loadCharGLB('kazan'), 400)); // effects, then Kazan, download in the background while you are in the lobby
+  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan'), 400)); // effects, then Kazan, download in the background while you are in the lobby
   if (PROFILE.char !== 'raven') { const want = PROFILE.char; PROFILE.char = 'raven'; selectChar(want); }
   setupInstall();
   $('#loading').classList.add('hidden');
