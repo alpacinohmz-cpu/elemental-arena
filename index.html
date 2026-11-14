@@ -37,6 +37,13 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .gbtn.dis{opacity:.45;filter:grayscale(.6);cursor:not-allowed}
 .imgbtn{background:center/100% 100% no-repeat;border:0;color:#2b1d08;font-family:'Cinzel',serif;font-weight:900;letter-spacing:.12em;text-shadow:0 1px 0 rgba(255,240,200,.6);transition:transform .12s,filter .15s}
 .imgbtn:hover{filter:brightness(1.12)} .imgbtn:active{transform:scale(.97)}
+#charLoad{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;background:rgba(6,5,6,.55)}
+.legend{display:inline-block;vertical-align:middle;margin-left:10px;padding:2px 9px;font-size:11px;letter-spacing:.16em;color:#2b1204;background:linear-gradient(90deg,#ffb347,#ff6a1a,#ffd36a);border-radius:2px;box-shadow:0 0 14px rgba(255,120,30,.7);animation:legP 1.6s infinite alternate}
+.legend.sm{font-size:9px;padding:1px 6px;margin-left:6px}
+@keyframes legP{to{box-shadow:0 0 24px rgba(255,140,40,1);filter:brightness(1.15)}}
+.ccard.legendary{box-shadow:0 0 0 2px #ff7a2a,0 0 18px rgba(255,100,20,.55);animation:legP 1.6s infinite alternate}
+.ccard .legTag{position:absolute;right:8px;top:8px;padding:1px 7px;font-family:'Cinzel',serif;font-weight:900;font-size:9.5px;letter-spacing:.12em;color:#2b1204;background:linear-gradient(90deg,#ffb347,#ff6a1a);border-radius:2px}
+.fcard.magma{border-color:rgba(255,122,42,.6);background:linear-gradient(90deg,rgba(120,30,5,.35),rgba(0,0,0,.25))}
 #toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-10px);z-index:80;padding:9px 18px;font-family:'Cinzel',serif;font-weight:700;font-size:14px;letter-spacing:.06em;color:var(--gold2);background:var(--ink);border:1px solid var(--gold3);border-radius:4px;opacity:0;pointer-events:none;transition:.25s}
 #toast.on{opacity:1;transform:translate(-50%,0)}
 
@@ -202,6 +209,11 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
 @keyframes rdy{to{box-shadow:0 0 18px #ffd36a,0 0 4px #fff}}
 .ks.deny,.tb.deny{animation:deny .3s}
 @keyframes deny{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+.tb .tg,.ks .tg{position:absolute;right:-2px;top:-2px;width:18px;height:18px;border-radius:50%;background:#1b1714;border:1.5px solid var(--gold);font:900 10px/15px 'Cinzel',serif;color:var(--gold2);text-align:center}
+.pips{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);display:flex;gap:4px;text-decoration:none}
+.pips i{width:7px;height:7px;border-radius:50%;background:rgba(0,0,0,.6);border:1px solid #f3d893}
+.pips i.on{background:#ffe08a;box-shadow:0 0 6px #ffc040}
+.ks .pips{bottom:4px} .ks .pips i{width:5px;height:5px}
 .shieldIc{background:radial-gradient(circle at 50% 40%,#2a2522,#100d0c);border:2.5px solid var(--gold)}
 .shieldIc::before{content:'';position:absolute;left:50%;top:50%;width:42%;height:50%;transform:translate(-50%,-50%);background:linear-gradient(180deg,#f3d893,#a8792a);clip-path:polygon(50% 0,100% 15%,95% 55%,50% 100%,5% 55%,0 15%)}
 /* touch */
@@ -292,6 +304,7 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
 <div id="offArrow">➤</div>
 <div id="touch" class="hidden"><div id="joyZone"></div><div id="joy"><i></i></div><div id="tbtns"></div></div>
 <div id="toast"></div>
+<div id="charLoad" class="hidden"><div class="frame" style="padding:14px 20px;text-align:center;min-width:260px"><div id="charLoadTxt" class="cz" style="font-size:13px;color:#f3d893">Summoning…</div><div class="barL" style="margin:10px auto 0;width:220px"><i id="charLoadBar"></i></div></div></div>
 <div id="iosHint" class="ovl hidden"><div class="frame"><h1 style="font-size:28px">INSTALL</h1><div class="sub2">On iPhone / iPad: tap <b>Share</b> <span style="font-size:20px">⎋</span> in Safari, then <b>Add to Home Screen</b>.<br>The game then opens full screen like an app and loads instantly.</div><div class="btns"><button class="gbtn gold" onclick="this.closest('.ovl').classList.add('hidden')">OK</button></div></div></div>
 
 <!-- ============ LOBBY ============ -->
@@ -341,7 +354,7 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
 (function () {
   var txt = document.getElementById('loadTxt'), help = document.getElementById('loadHelp'), bar = document.getElementById('loadBar');
   function say(m) { help.style.display = 'block'; help.innerHTML = m; }
-  if (location.protocol === 'file:') { txt.textContent = 'Cannot start from a file'; say('Browsers block games opened directly as a file (from a zip or a download folder). Open the game from its web link (GitHub Pages / Netlify), or run a local server: <b>python -m http.server</b> in this folder, then open <b>http://localhost:8000</b>.'); return; }
+  if (!/^https?:$/.test(location.protocol)) { txt.textContent = 'Cannot start from a file'; say('Phones and browsers block games opened as a file (from the file manager, a zip or the downloads folder) — that is why it stays stuck here. Open the game from its web link (GitHub Pages / Netlify), or run a local server: <b>python -m http.server</b> in this folder, then open <b>http://localhost:8000</b>.'); return; }
   txt.textContent = 'Downloading game engine…';
   var w = 1, t0 = Date.now();
   var pulse = setInterval(function () { if (window.__loadTick) { clearInterval(pulse); return; } w = Math.min(4, w + .15); bar.style.width = w + '%'; }, 200);

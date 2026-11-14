@@ -1022,9 +1022,9 @@ const AI_USE = { fire: { s1: [2, 22, 3], s2: [0, 5.2, 3], su: [0, 15], pref: 4.5
 function buildRavenKits() {
   for (const el of ELS) {
     const B = BAL.el[el], U = AI_USE[el];
-    RAVEN_KITS[el] = { name: EL[el].name, btn: [[el + '_s1', B.s1.name], [el + '_s2', B.s2.name]], superAb: el + '_su', superR: U.su,
+    RAVEN_KITS[el] = { name: EL[el].name, basic: el, btn: [[el, EL[el].name + ' Attack'], [el + '_s1', B.s1.name], [el + '_s2', B.s2.name]], superAb: el + '_su', superR: U.su,
       desc: `<b>${B.s1.name}</b> · <b>${B.s2.name}</b> · Super: <b>${B.su.name}</b><br>Perk: ${PERK_TEXT[el]}`,
-      moves: [[el + '_s1', .5, U.s1[2], U.s1[0], U.s1[1]], [el + '_s2', .8, U.s2[2], U.s2[0], U.s2[1]]],
+      moves: [[el, .15, 4, 2, 20], [el + '_s1', .5, U.s1[2], U.s1[0], U.s1[1]], [el + '_s2', .8, U.s2[2], U.s2[0], U.s2[1]]],
       pref: U.pref, speed: BAL.moveSpeed, aggr: .75, blockP: .45, jumpP: .25, airJumps: 1, glide: false, armor: 1, heal: 0 };
   }
 }
@@ -1144,7 +1144,7 @@ function spawnBlockWall(f, t, kind = 'earth') {
   WALLS.push(w); FX.earth(pos.clone().setY(pos.y + .2), 14, 1); Sfx.play('earth'); shake(.15); return w;
 }
 function spawnVortex(f, t) { const pos = t.pos.clone(); pos.y = groundAt(pos.x, pos.z, pos.y + .1); telegraph(pos, 3.4, 0xdff4ff, .45); later(.45, () => PROJ.push({ kind: 'vortex', owner: f, target: t, t: 0, life: 1.8, pos, power: 2, el: 'wind', tickT: 0 })); }
-function spawnGeyser(f, t) {
+function spawnGeyser(f, t, dmg = 12) {
   const pos = t.pos.clone().addScaledVector(t.vel, .3); const r0 = Math.hypot(pos.x, pos.z); if (r0 > CFG.ARENA_R) pos.multiplyScalar(CFG.ARENA_R / r0);
   pos.y = groundAt(pos.x, pos.z, t.pos.y + .1); telegraph(pos, 1.4, 0x3fa8ff, .38); Sfx.play('water');
   later(.38, () => {
@@ -1154,10 +1154,10 @@ function spawnGeyser(f, t) {
     TWEENS.push({ t: 0, d: .9, f: k => { const up = k < .2 ? easeOut(k / .2) : 1; m.scale.set(1 + Math.sin(k * 40) * .05, Math.max(.01, up * (k > .7 ? 1 - (k - .7) / .3 : 1)), 1 + Math.cos(k * 40) * .05); m.position.y = pos.y + 2.25 * m.scale.y; m.material.opacity = .75 * (k > .7 ? 1 - (k - .7) / .3 : 1); m.rotation.y += .2; }, end: () => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); } });
     for (let i = 0; i < 60; i++) PADD.emit(pos.x + rand(-.6, .6), pos.y + rand(0, 1), pos.z + rand(-.6, .6), rand(-2, 2), rand(8, 16), rand(-2, 2), .35, .8, 1.7, rand(.2, .45), rand(.5, 1), 14, .3, .05);
     FX.burst(pos.clone().setY(pos.y + .3), 'water', 20, 5, 1.2); Sfx.play('water'); shake(.3);
-    if (Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.5 && t.pos.y - pos.y < 2) applyHit(f, t, { dmg: 12, kb: 1, launch: 13, el: 'water', from: pos, heavy: true });
+    if (Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.5 && t.pos.y - pos.y < 2) applyHit(f, t, { dmg, kb: 1, launch: 9, el: 'water', from: pos, heavy: true });
   });
 }
-function spikeLine(f, t) {
+function spikeLine(f, t, dmg = 12) {
   const dir = t.pos.clone().sub(f.pos).setY(0).normalize(); let hit = false;
   for (let i = 0; i < 9; i++) later(i * .055, () => {
     if (game.state !== 'fight' && game.state !== 'ko') return;
@@ -1167,16 +1167,16 @@ function spikeLine(f, t) {
     for (let k = 0; k < 3; k++) { const c = M(new THREE.ConeGeometry(.32 - k * .06, 1.9 - k * .4, 6), MATS.rocks[k % 2], rand(-.35, .35), 0, rand(-.35, .35), g); c.rotation.set(rand(-.3, .3), rand(0, 6), rand(-.3, .3)); }
     TWEENS.push({ t: 0, d: 1.0, f: k => { g.position.y = pos.y + (k < .12 ? lerp(-1.6, 0, k / .12) : k > .65 ? lerp(0, -1.8, (k - .65) / .35) : 0); }, end: () => scene.remove(g) });
     FX.earth(pos.clone().setY(pos.y + .2), 6, .5); if (i % 2 === 0) { Sfx.play('earth'); decal(pos, 'crack', 1.6); }
-    if (!hit && Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.2 && t.pos.y - pos.y < 1.3) { hit = true; applyHit(f, t, { dmg: 12, kb: 3, launch: 11, el: 'earth', from: pos, heavy: true }); }
+    if (!hit && Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z) < 1.2 && t.pos.y - pos.y < 1.3) { hit = true; applyHit(f, t, { dmg, kb: 3, launch: 8, el: 'earth', from: pos, heavy: true }); }
   });
   shake(.3);
 }
-function waterWhip(f, t, side = 'R') {
-  const from = handPos(f, side), to = t.pos.clone().setY(t.pos.y + 1); const dir = to.clone().sub(from).normalize(); const len = Math.min(from.distanceTo(to), 5.5);
+function waterWhip(f, t, side = 'R', dmg = 9) {
+  const from = handPos(f, side), to = t.pos.clone().setY(t.pos.y + 1); const dir = to.clone().sub(from).normalize(); const len = Math.min(from.distanceTo(to), 7);
   for (let i = 0; i < 40; i++) { _v1.copy(from).addScaledVector(dir, i / 40 * len); _v1.y += Math.sin(i * .5) * .15; PADD.emit(_v1.x, _v1.y, _v1.z, rand(-.3, .3), rand(-.3, .3), rand(-.3, .3), .3, .75, 1.7, rand(.25, .4), rand(.25, .4), 3, 1, .05); }
   Sfx.play('water');
   const fwd = new V3(Math.sin(f.yaw), 0, Math.cos(f.yaw)); const flat = t.pos.clone().sub(f.pos).setY(0); const fd = flat.length(); flat.normalize();
-  if (fd < 5.6 && fwd.dot(flat) > .55) applyHit(f, t, { dmg: 9, kb: -8, el: 'water', from: f.pos, pull: true });
+  if (fd < 7.1 && fwd.dot(flat) > .55) applyHit(f, t, { dmg, kb: -6, el: 'water', from: f.pos, pull: true });
 }
 function steamBurst(f, t) {
   const c = f.pos.clone().setY(f.pos.y + 1);
@@ -1461,7 +1461,152 @@ function buildKits() {
   def('lightning_su', { el: 'lightning', clip: 'magic2h3', anim: 'burst', hit: 1.0, speed: 1.9, dur: 1.75, cd: 1, super: true, power: 3, label: B.lightning.su.name, fn(f, t) { const s = B.lightning.su; thunderStrikes(f, t, s.strikes, .38, s.dmg / s.strikes, .35, 1.2); Sfx.play('thunder'); } });
 }
 
-buildKits();
+// ---------------------------------------------------------------- KAZAN — Lord of Magma (legendary fighter; numbers from the user's sheet)
+BAL.chars = {
+  raven: { hp: BAL.hp, speedMul: 1, dashCD: BAL.dashCD, combo: BAL.combo, height: 1.85 },
+  kazan: { hp: 1050, speedMul: .95, dashCD: 6, combo: [30, 35, 55], height: 1.95,
+    heat: { max: 3, dur: 6, bonus: 20, slow: .15, slowDur: 2 },
+    s1: { name: 'Magma Fist', dmg: 100, punch: 60, blast: 40, cd: 8, windup: .45, recover: .4, range: 2.8, blastR: 2.0 },
+    s2: { name: 'Volcanic Fissure', dmg: 65, cd: 12, warn: .8, length: 11, width: 1.8, lavaDur: 3, lavaDps: 15 },
+    su: { name: 'Crater of Wrath', dmg: 170, warn: 1.2, radius: 3.4, minDist: 3, maxDist: 8, lavaDur: 3, lavaDps: 20 },
+    maxLava: 2, lavaTick: .5 },
+};
+const KZ = BAL.chars.kazan;
+const KAZAN_PERK_TEXT = `Skill hits build <b>Magma Heat</b> (max 3, 6 s). At 3 stacks the 3rd combo hit becomes <b>Molten</b>: +${KZ.heat.bonus} damage and ${Math.round(KZ.heat.slow * 100)}% slow for ${KZ.heat.slowDur} s (stacks are spent even on a miss).`;
+const KAZAN_KIT = { name: 'Magma', basic: 'magma', btn: [['magma', 'Magma Attack'], ['kz_s1', KZ.s1.name], ['kz_s2', KZ.s2.name]], superAb: 'kz_su', superR: [2.5, 8.5],
+  desc: `<b>${KZ.s1.name}</b> · <b>${KZ.s2.name}</b> · Super: <b>${KZ.su.name}</b><br>Perk: ${KAZAN_PERK_TEXT}`,
+  moves: [['magma', .15, 3.5, 2.5, 18], ['kz_s1', .6, 3, 0, 3.0], ['kz_s2', .9, 2.4, 3, 10.5]], pref: 2.8, speed: BAL.moveSpeed * KZ.speedMul, aggr: .85, blockP: .4, jumpP: .1, airJumps: 1, glide: false, armor: 1, heal: 0 };
+
+// ---- lava zones (only hurt while standing inside; overlapping zones never stack; max 2 per Kazan)
+const LAVA = [];
+let LAVA_TEX = null;
+function lavaTex() { if (!LAVA_TEX) { LAVA_TEX = new THREE.TextureLoader().load('assets/lava.jpg'); LAVA_TEX.wrapS = LAVA_TEX.wrapT = THREE.RepeatWrapping; LAVA_TEX.colorSpace = THREE.SRGBColorSpace; } return LAVA_TEX; }
+const LAVA_FS = `uniform sampler2D map; uniform float t, fade, circ; uniform vec2 rep; varying vec2 vUv;
+void main(){ vec2 uv = vUv * rep; vec3 c = texture2D(map, uv + vec2(t * .03, t * .02)).rgb; vec3 c2 = texture2D(map, uv * 1.7 - vec2(t * .02, -t * .025)).rgb;
+  vec3 col = mix(c, c2, .4); float hot = smoothstep(.25, .9, col.r - col.g * .5); col = col * 1.4 + vec3(1., .35, .05) * hot * (1.2 + .4 * sin(t * 3.));
+  float e; if (circ > .5) { e = 1. - smoothstep(.72, 1., length(vUv - .5) * 2.); } else { vec2 d = abs(vUv - .5) * 2.; e = (1. - smoothstep(.6, 1., d.y)) * (1. - smoothstep(.93, 1., d.x)); }
+  gl_FragColor = vec4(col, e * fade); }`;
+const LAVA_VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`;
+function lavaMesh(geo, rep, circ) {
+  const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { map: { value: lavaTex() }, t: { value: 0 }, fade: { value: 0 }, circ: { value: circ ? 1 : 0 }, rep: { value: new THREE.Vector2(...rep) } }, vertexShader: LAVA_VS, fragmentShader: LAVA_FS, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  m.renderOrder = 3; scene.add(m); return m;
+}
+function addLava(owner, z) {
+  const mine = LAVA.filter(l => l.owner === owner); if (mine.length >= KZ.maxLava) removeLava(mine[0]);
+  if (z.kind === 'line') {
+    const len = z.a.distanceTo(z.b), geo = new THREE.PlaneGeometry(len, z.w); geo.rotateX(-Math.PI / 2);
+    z.mesh = lavaMesh(geo, [len / 3, z.w / 3], false); z.mesh.position.set((z.a.x + z.b.x) / 2, Math.max(z.a.y, z.b.y) + .04, (z.a.z + z.b.z) / 2); z.mesh.rotation.y = -Math.atan2(z.b.z - z.a.z, z.b.x - z.a.x);
+  } else { const geo = new THREE.CircleGeometry(z.r, 40); geo.rotateX(-Math.PI / 2); z.mesh = lavaMesh(geo, [z.r / 1.6, z.r / 1.6], true); z.mesh.position.set(z.c.x, z.c.y + .04, z.c.z); }
+  Object.assign(z, { owner, t: 0, acc: new Map() }); LAVA.push(z); return z;
+}
+function removeLava(z) { const i = LAVA.indexOf(z); if (i >= 0) LAVA.splice(i, 1); scene.remove(z.mesh); z.mesh.geometry.dispose(); z.mesh.material.dispose(); }
+function inZone(z, p) {
+  if (z.kind === 'line') { const ax = z.a.x, az = z.a.z, dx = z.b.x - ax, dz = z.b.z - az, L2 = dx * dx + dz * dz; const k = clamp(((p.x - ax) * dx + (p.z - az) * dz) / L2, 0, 1); return Math.hypot(p.x - ax - dx * k, p.z - az - dz * k) < z.w / 2 + .15 && p.y - z.a.y < .5; }
+  return Math.hypot(p.x - z.c.x, p.z - z.c.z) < z.r && p.y - z.c.y < .5;
+}
+function updateLava(dt) {
+  for (const z of [...LAVA]) {
+    z.t += dt; const u = z.mesh.material.uniforms; u.t.value = game.time; u.fade.value = Math.min(1, z.t / .25) * Math.min(1, (z.dur - z.t) / .5);
+    if (Math.random() < .5) { const p = z.kind === 'line' ? _v1.lerpVectors(z.a, z.b, Math.random()) : _v1.copy(z.c).add(_v2.set(rand(-1, 1) * z.r * .7, 0, rand(-1, 1) * z.r * .7)); FX.fire(_v3.copy(p).setY(p.y + .15), 1, .25, _v4.set(0, 1.5, 0), .7); }
+    if (z.t >= z.dur) removeLava(z);
+  }
+  for (const tgt of [hero, enemy]) {
+    if (!tgt || tgt.ghost()) continue;
+    let best = null; for (const z of LAVA) if (z.owner !== tgt && z.t > .15 && inZone(z, tgt.pos) && (!best || z.dps > best.dps)) best = z; // highest zone only, never summed
+    if (!best) { tgt.lavaAcc = 0; continue; }
+    tgt.lavaAcc = (tgt.lavaAcc || 0) + dt;
+    if (tgt.lavaAcc >= KZ.lavaTick) { tgt.lavaAcc -= KZ.lavaTick; applyHit(best.owner, tgt, { dmg: best.dps * KZ.lavaTick, kb: 0, el: 'fire', from: tgt.pos.clone().setY(tgt.pos.y - 1), multi: true, noStagger: true, unblockable: true, lava: true }); }
+  }
+}
+function clearLava() { for (const z of [...LAVA]) removeLava(z); }
+function telegraphLine(a, b, w, color, dur) {
+  const len = a.distanceTo(b), g = new THREE.Group();
+  const mk = (W, op) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(len, W), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false })); m.rotation.x = -Math.PI / 2; g.add(m); return m; };
+  const fill = mk(w, .2), edge1 = mk(.08, .9), edge2 = mk(.08, .9); edge1.position.z = w / 2; edge2.position.z = -w / 2;
+  g.position.set((a.x + b.x) / 2, Math.max(a.y, b.y) + .05, (a.z + b.z) / 2); g.rotation.y = -Math.atan2(b.z - a.z, b.x - a.x); scene.add(g);
+  TELES.push({ line: true, ax: a.x, az: a.z, bx: b.x, bz: b.z, w, end: game.time + dur });
+  TWEENS.push({ t: 0, d: dur, f: k => { fill.scale.x = Math.max(.01, k); fill.position.x = -len / 2 * (1 - k); edge1.material.opacity = edge2.material.opacity = .5 + .5 * Math.sin(k * 30); }, end: () => { scene.remove(g); g.traverse(o => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); } });
+}
+function teleHit(T, x, z, pad = .6) { if (!T.line) return Math.hypot(x - T.x, z - T.z) < T.r + pad; const dx = T.bx - T.ax, dz = T.bz - T.az, L2 = dx * dx + dz * dz || 1, k = clamp(((x - T.ax) * dx + (z - T.az) * dz) / L2, 0, 1); return Math.hypot(x - T.ax - dx * k, z - T.az - dz * k) < T.w / 2 + pad; }
+function teleAway(T, x, z) { if (!T.line) return new V3(x - T.x, 0, z - T.z); const dx = T.bx - T.ax, dz = T.bz - T.az; const side = (x - T.ax) * dz - (z - T.az) * dx; return new V3(dz, 0, -dx).multiplyScalar(side >= 0 ? 1 : -1); }
+
+function kazanFx(p, big) { fb('fire_burst', { pos: p.clone().setY(p.y + (big ? 1.4 : .9)), size: big ? 4.5 : 2.4, boost: 1.2 }); fb('fire_ring', { pos: p.clone().setY(p.y + .12), size: big ? 7 : 3.2, speed: 1.4 }); FX.burst(p.clone().setY(p.y + .4), 'fire', big ? 40 : 18, big ? 8 : 5, big ? 1.6 : 1); FX.earth(p.clone().setY(p.y + .2), big ? 20 : 8, big ? 2 : 1); for (let i = 0; i < (big ? 12 : 5); i++) DEBRIS.spawn(p.clone().setY(p.y + .3), _v1.randomDirection().multiplyScalar(rand(3, 7)).setY(rand(3, 8)), rand(.8, 1.8)); }
+function buildKazanKit() {
+  def('kz_s1', { el: 'fire', clip: 'magic1h', anim: 'punch', hit: KZ.s1.windup, speed: 1, dur: KZ.s1.windup + .3, cd: KZ.s1.cd, label: KZ.s1.name,
+    onStart(f) { f.vel.addScaledVector(fwdOf(f), 3.5); fb('fire_loop', { follow: () => f.state === 'cast' ? handPos(f, 'L') : null, size: 1.1, loop: true, life: KZ.s1.windup + .1 }); },
+    fn(f, t) {
+      const fw = fwdOf(f), fist = f.pos.clone().addScaledVector(fw, 1.5); Sfx.play('heavy'); Sfx.play('fire');
+      const hit1 = coneHit(f, t, KZ.s1.range, .75, KZ.s1.punch, { kb: 2, el: 'fire', heavy: true });
+      later(.12, () => { if (game.state !== 'fight' && game.state !== 'ko') return; kazanFx(fist, false); Sfx.play('explode'); shake(.3);
+        let hit2 = false; if (!t.ghost() && Math.hypot(t.pos.x - fist.x, t.pos.z - fist.z) < KZ.s1.blastR && Math.abs(t.pos.y - fist.y) < 2) { applyHit(f, t, SK(f, { dmg: KZ.s1.blast, kb: 6, launch: 3, el: 'fire', from: fist, heavy: true })); hit2 = true; }
+        if (!hit1 && !hit2 && f.cast) f.cast.dur = f.cast.a.dur + KZ.s1.recover; }); // a whiff leaves Kazan open
+    } });
+  def('kz_s2', { el: 'fire', clip: 'magic_area', anim: 'stomp', hit: .5, speed: 1.4, dur: .95, cd: KZ.s2.cd, label: KZ.s2.name,
+    fn(f, t) {
+      const aim = aimPoint(f, t, .2), dir = aim.sub(f.pos).setY(0).normalize(); if (dir.lengthSq() < .01) dir.copy(fwdOf(f));
+      const a = f.pos.clone().addScaledVector(dir, .8), b = f.pos.clone().addScaledVector(dir, .8 + KZ.s2.length); const r = Math.hypot(b.x, b.z); if (r > CFG.ARENA_R) b.multiplyScalar(CFG.ARENA_R / r);
+      a.y = groundAt(a.x, a.z, f.pos.y + .2); b.y = a.y;
+      kazanFx(f.pos.clone().addScaledVector(dir, .9), false); decal(a, 'crack', 2); Sfx.play('earth'); shake(.25);
+      telegraphLine(a, b, KZ.s2.width, 0xff5a1a, KZ.s2.warn); const cid = f.castId;
+      later(KZ.s2.warn, () => {
+        if (game.state !== 'fight' && game.state !== 'ko') return;
+        const n = 6; for (let i = 0; i <= n; i++) later(i * .04, () => { const p = new V3().lerpVectors(a, b, i / n); fb('fire_burst', { pos: p.clone().setY(p.y + 1), size: 2.3, boost: 1.1 }); FX.earth(p.clone().setY(p.y + .2), 4, .6); if (i % 2 === 0) decal(p, 'scorch', 2.2); });
+        Sfx.play('explode'); Sfx.play('fire'); shake(.4);
+        const z = addLava(f, { kind: 'line', a, b, w: KZ.s2.width, dur: KZ.s2.lavaDur, dps: KZ.s2.lavaDps });
+        if (!t.ghost() && inZone(z, t.pos)) applyHit(f, t, { dmg: KZ.s2.dmg, kb: 3, launch: 5, el: 'fire', from: t.pos.clone().setY(t.pos.y - 1), heavy: true, skill: true, castId: cid, unblockable: false });
+      });
+    } });
+  def('kz_su', { el: 'fire', clip: 'magic2h3', anim: 'burst', hit: KZ.su.warn, speed: 1.6, dur: KZ.su.warn + .45, cd: 1, super: true, power: 3, label: KZ.su.name,
+    onStart(f, t) { // the circle is placed once in front of Kazan and does NOT follow the target
+      const fw = fwdOf(f), d = clamp(Math.hypot(t.pos.x - f.pos.x, t.pos.z - f.pos.z) + (f.aimErr ? rand(-1, 1) * f.aimErr * 8 : 0), KZ.su.minDist, KZ.su.maxDist);
+      const P = f.pos.clone().addScaledVector(fw, d); const r = Math.hypot(P.x, P.z); if (r > CFG.ARENA_R - 1) P.multiplyScalar((CFG.ARENA_R - 1) / r);
+      P.y = groundAt(P.x, P.z, f.pos.y + .3); f.suP = P; telegraph(P, KZ.su.radius, 0xff3a10, KZ.su.warn);
+      fb('fire_ring', { pos: P.clone().setY(P.y + .1), size: KZ.su.radius * 2, loop: true, life: KZ.su.warn, opacity: .6 });
+    },
+    fn(f, t) { const P = f.suP, s = KZ.su;
+      fb('explosion', { pos: P.clone().setY(P.y + 2.6), size: 9 }); kazanFx(P, true); decal(P, 'scorch', 7); Sfx.play('explode'); Sfx.play('earth'); shake(.9); flashSky();
+      addLava(f, { kind: 'circle', c: P.clone(), r: s.radius, dur: s.lavaDur, dps: s.lavaDps });
+      if (!t.ghost() && Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 2.5) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 8, launch: 6, el: 'fire', from: P, heavy: true })); } });
+}
+// Magma Heat — skills build it, the 3rd combo hit spends it
+function kazanPerk(att, tgt, h, dmg) {
+  if (h.skill && h.castId && att.heatCast !== h.castId) { att.heatCast = h.castId; att.heat = Math.min(KZ.heat.max, (att.heat || 0) + 1); att.heatT = KZ.heat.dur; popText(att.pos.clone().setY(att.pos.y + 2.4), 'HEAT ' + att.heat, '#ffb070', 18); }
+}
+
+// ---------------------------------------------------------------- ELEMENT ATTACK — tap 3 times: 3 different ranged strikes (every fighter)
+BAL.basic = { dmg: [30, 30, 45], cd: [.42, .5, 1.0], chainWindow: 1.1 };
+function buildBasics() {
+  const D = BAL.basic.dmg, C = BAL.basic.cd;
+  const s1 = { clip: 'magic1h', hit: .16, speed: 2.6, dur: .4 }, s2 = { clip: 'magic2h', hit: .18, speed: 2.6, dur: .45 }, s3 = { hit: .26, speed: 2, dur: .62, power: 2 };
+  const B = (name, base, o) => def(name, Object.assign({}, base, o, { basic: true }));
+  const pair = (f, t, o, gap = .14) => { const sh = s => spawnBall(f, t, Object.assign({ pos: frontPos(f, .9, o.y || 1.3).add(new V3(Math.cos(f.yaw) * s * .25, 0, -Math.sin(f.yaw) * s * .25)), spread: s * .05 }, o, { dmg: D[1] / 2 })); sh(1); later(gap, () => { if (f.state === 'cast') sh(-1); }); };
+  // fire
+  B('fire', s1, { el: 'fire', anim: 'punch', cd: C[0], hint: 'Fireball', fn(f, t) { spawnBall(f, t, { el: 'fire', pos: frontPos(f, .9, 1.35), speed: 28, radius: .38, dmg: D[0], kb: 3, vis: 'fire', life: 2 }); Sfx.play('fire'); } });
+  B('fire2', s2, { el: 'fire', anim: 'rapid', cd: C[1], hint: 'Twin Flames', fn(f, t) { pair(f, t, { el: 'fire', speed: 29, radius: .32, kb: 2.5, vis: 'fire', life: 2 }); Sfx.play('fire'); } });
+  B('fire3', s3, { el: 'fire', clip: 'kick2', anim: 'kick', cd: C[2], hint: 'Flame Wave', fn(f, t) { spawnBall(f, t, { el: 'fire', pos: frontPos(f, 1, .8), speed: 21, radius: 1.3, dmg: D[2], kb: 8, knockdown: true, life: .95, vis: 'crescent', big: true }); Sfx.play('fire'); Sfx.play('wind'); shake(.15); } });
+  // water
+  B('water', s1, { el: 'water', anim: 'push', cd: C[0], hint: 'Water Orb', fn(f, t) { spawnBall(f, t, { el: 'water', pos: frontPos(f, .9, 1.3), speed: 20, radius: .46, dmg: D[0], kb: 4, homing: 1.4, vis: 'water', life: 2.2 }); Sfx.play('water'); } });
+  B('water2', s2, { el: 'water', anim: 'jab', cd: C[1], hint: 'Water Lash', fn(f, t) { waterWhip(f, t, 'L', D[1]); } });
+  B('water3', s3, { el: 'water', clip: 'magic_area', anim: 'uppercut', cd: C[2], hint: 'Geyser', fn(f, t) { spawnGeyser(f, t, D[2]); } });
+  // wind
+  B('wind', s1, { el: 'wind', clip: 'kick2', anim: 'kick', speed: 3, cd: C[0], hint: 'Air Bullet', fn(f, t) { spawnBall(f, t, { el: 'wind', pos: frontPos(f, .9, 1.1), speed: 34, radius: .8, dmg: D[0], kb: 6, life: .7, vis: 'wind' }); Sfx.play('wind'); } });
+  B('wind2', s2, { el: 'wind', anim: 'sweep', cd: C[1], hint: 'Air Slicers', fn(f, t) { for (const sp of [-.16, .16]) spawnBall(f, t, { el: 'wind', pos: frontPos(f, .9, .9), speed: 31, radius: .7, dmg: D[1] / 2, kb: 3, spread: sp, life: .9, vis: 'crescent' }); Sfx.play('wind'); } });
+  B('wind3', s3, { el: 'wind', clip: 'hurricane', anim: 'spin', speed: 2.4, cd: C[2], hint: 'Gale Burst', fn(f, t) { spawnBall(f, t, { el: 'wind', pos: frontPos(f, 1, 1.1), speed: 25, radius: 1.6, dmg: D[2], kb: 14, launch: 5, life: .6, vis: 'gale' }); Sfx.play('wind'); shake(.2); } });
+  // earth
+  B('earth', s1, { el: 'earth', anim: 'lift', cd: C[0], hint: 'Boulder', fn(f, t) { const p = frontPos(f, 1.1, -.4); spawnBall(f, t, { el: 'earth', pos: p, speed: 22, radius: .55, dmg: D[0], kb: 5, rise: .12, riseTo: 1.3, vis: 'rock', life: 2 }); Sfx.play('earth'); FX.earth(p.clone().setY(f.pos.y + .1), 8, .5); } });
+  B('earth2', s2, { el: 'earth', anim: 'rapid', cd: C[1], hint: 'Rock Shards', fn(f, t) { const p = frontPos(f, .9, 1.25); for (const sp of [-.14, 0, .14]) spawnBall(f, t, { el: 'earth', pos: p.clone(), speed: 30, radius: .33, dmg: D[1] / 3, kb: 2, spread: sp, vis: 'shard', life: 1.4 }); Sfx.play('earth'); } });
+  B('earth3', s3, { el: 'earth', clip: 'magic_area', anim: 'hammer', cd: C[2], hint: 'Earth Pillars', fn(f, t) { spikeLine(f, t, D[2]); } });
+  // lightning
+  B('lightning', s1, { el: 'lightning', anim: 'punch', cd: C[0], hint: 'Spark', fn(f, t) { spawnBall(f, t, { el: 'lightning', pos: frontPos(f, .9, 1.35), speed: 46, radius: .32, dmg: D[0], kb: 2, stun: .12, vis: 'bolt', life: 1 }); Sfx.play('lightning'); } });
+  B('lightning2', s2, { el: 'lightning', anim: 'push', cd: C[1], hint: 'Twin Bolts', fn(f, t) { for (const sp of [-.06, .06]) spawnBall(f, t, { el: 'lightning', pos: frontPos(f, .9, 1.3), speed: 48, radius: .3, dmg: D[1] / 2, kb: 1.5, spread: sp, vis: 'bolt', life: 1 }); Sfx.play('lightning'); } });
+  B('lightning3', s3, { el: 'lightning', clip: 'magic2h', anim: 'lift', speed: 2.4, cd: C[2], hint: 'Lightning Lance', fn(f, t) { spawnBall(f, t, { el: 'lightning', pos: frontPos(f, .9, 1.6), speed: 56, radius: .5, dmg: D[2], kb: 7, stun: .3, knockdown: true, vis: 'lance', life: 1 }); Sfx.play('thunder'); shake(.25); } });
+  // Kazan — magma (no lava pools: those only come from his skills)
+  B('magma', s1, { el: 'fire', anim: 'punch', cd: C[0], hint: 'Magma Shot', fn(f, t) { spawnBall(f, t, { el: 'fire', pos: frontPos(f, .9, 1.35), speed: 25, radius: .42, dmg: D[0], kb: 3, vis: 'fire', life: 2, trail: 'fire_loop', trailSize: 1 }); Sfx.play('fire'); } });
+  B('magma2', s2, { el: 'earth', anim: 'rapid', cd: C[1], hint: 'Lava Shards', fn(f, t) { pair(f, t, { el: 'fire', speed: 27, radius: .34, kb: 2.5, vis: 'railrock', life: 1.6, y: 1.25 }); Sfx.play('earth'); Sfx.play('fire'); } });
+  B('magma3', s3, { el: 'fire', clip: 'magic_area', anim: 'hammer', speed: 2.2, cd: C[2], hint: 'Magma Boulder', fn(f, t) { const p = frontPos(f, 1.2, -.4); spawnBall(f, t, { el: 'fire', pos: p, speed: 19, radius: .75, dmg: D[2], kb: 8, knockdown: true, rise: .14, riseTo: 1.4, vis: 'rock', life: 2.2, trail: 'fire_loop', trailSize: 1.6 }); FX.earth(p.clone().setY(f.pos.y + .1), 12, .7); Sfx.play('earth'); Sfx.play('fire'); shake(.2); } });
+}
+const isBasic = (f, name) => !!name && (ELS.includes(name) || (f.kit && name === f.kit.basic));
+buildKits(); buildKazanKit(); buildBasics();
 // ---------------------------------------------------------------- HIT RESOLUTION
 function applyHit(att, tgt, h) {
   if (tgt.invuln > 0 || tgt.state === 'ko' || (game.state !== 'fight' && game.state !== 'ko')) return 'miss';
@@ -1513,12 +1658,13 @@ function applyHit(att, tgt, h) {
   return 'hit';
 }
 function perkOnHit(att, tgt, h, dmg) {
+  if (att.charId === 'kazan') return kazanPerk(att, tgt, h, dmg);
   if (att.isMaster || !att.el) return;
   const P = BAL.el[att.el].perk, once = !!h.castId && att.perkCast !== h.castId, head = att.pos.clone().setY(att.pos.y + 2.3);
   if (P.kind === 'lifesteal' && h.skill) {
     if (att.healCast !== h.castId) { att.healCast = h.castId; att.healed = 0; }
     const amt = Math.min(P.cap - att.healed, dmg * P.pct);
-    if (amt > .5) { att.healed += amt; att.hp = Math.min(BAL.hp, att.hp + amt); popText(head, '+' + Math.round(amt), '#7dff9a', 18); FX.el('fire', att.pos.clone().setY(att.pos.y + 1), 6, .5, _v3.set(0, 2, 0), .8); }
+    if (amt > .5) { att.healed += amt; att.hp = Math.min(att.maxHp, att.hp + amt); popText(head, '+' + Math.round(amt), '#7dff9a', 18); FX.el('fire', att.pos.clone().setY(att.pos.y + 1), 6, .5, _v3.set(0, 2, 0), .8); }
   } else if (P.kind === 'soak' && h.melee && h.third && (att.icd.soak || 0) <= 0) {
     tgt.sts.soak = P.dur; att.icd.soak = P.icd; popText(tgt.pos.clone().setY(tgt.pos.y + 2.3), 'SOAKED', '#9fd4ff', 20); fb('water_splash', { pos: tgt.pos.clone().setY(tgt.pos.y + 1.1), size: 2.4 });
   } else if (P.kind === 'haste' && h.skill && once && (att.icd.haste || 0) <= 0) {
@@ -1532,9 +1678,14 @@ function vibrate(ms) { try { if (IS_TOUCH && SETTINGS.vibrate && navigator.vibra
 
 // ---------------------------------------------------------------- MIXAMO CHARACTER (Raven GLB)
 let RAVEN_GLB = null;
+const CHAR_GLB = {}, CHAR_META = {}, CHAR_LOADING = {};
 const CLIP_SPEED = { walk: 1.6, walk_back: 1.5, strafe_left: 1.7, strafe_right: 1.7, run: 4.8 };
-function loadRavenGLB(onP) {
-  return new Promise(res => newGLTF().load('assets/raven.glb', g => {
+function loadCharGLB(id, onP = () => { }) {
+  if (CHAR_GLB[id]) { onP(1); return Promise.resolve(true); }
+  if (CHAR_LOADING[id]) { CHAR_LOADING[id].cbs.push(onP); return CHAR_LOADING[id].p; }
+  const L = CHAR_LOADING[id] = { cbs: [onP] };
+  fetch(`assets/${id}_meta.json`).then(r => r.json()).then(j => CHAR_META[id] = j).catch(() => { });
+  L.p = new Promise(res => newGLTF().load(`assets/${id}.glb`, g => {
     const clips = {};
     for (const c of g.animations) {
       for (const tr of c.tracks) if (/Hips\.position$/.test(tr.name)) { // keep the character in place: physics moves the root
@@ -1543,24 +1694,27 @@ function loadRavenGLB(onP) {
       }
       clips[c.name] = c;
     }
-    g.clips = clips; RAVEN_GLB = g; res();
-  }, x => { if (x.total) onP(x.loaded / x.total); }, e => { console.warn('raven.glb not loaded', e); res(); }));
+    g.clips = clips; CHAR_GLB[id] = g; if (id === 'raven') RAVEN_GLB = g; delete CHAR_LOADING[id]; L.cbs.forEach(f => f(1)); res(true);
+  }, x => { if (x.total) L.cbs.forEach(f => f(x.loaded / x.total)); }, e => { console.warn(id + '.glb not loaded', e); delete CHAR_LOADING[id]; res(false); }));
+  return L.p;
 }
+const loadRavenGLB = onP => loadCharGLB('raven', onP);
+const gmeta = G => CHAR_META[G.id] || {};
 const BONES = ['Hips', 'Spine', 'Neck', 'HeadTop_End', 'LeftArm', 'LeftForeArm', 'LeftHand', 'RightArm', 'RightForeArm', 'RightHand', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot'];
-function attachRavenGLB(R, el, variant) {
-  const model = SkeletonUtils.clone(RAVEN_GLB.scene);
+function attachRavenGLB(R, el, variant, id = 'raven') {
+  const SRC = CHAR_GLB[id]; const model = SkeletonUtils.clone(SRC.scene);
   const holder = new THREE.Group(); R.root.add(holder); holder.add(model);
   model.updateMatrixWorld(true);
-  let box = new THREE.Box3().setFromObject(model, true); const s = 1.85 / Math.max(.01, box.max.y - box.min.y); model.scale.multiplyScalar(s);
+  let box = new THREE.Box3().setFromObject(model, true); const s = ((BAL.chars[id] || {}).height || 1.85) / Math.max(.01, box.max.y - box.min.y); model.scale.multiplyScalar(s);
   model.updateMatrixWorld(true); box = new THREE.Box3().setFromObject(model, true);
   model.position.x -= (box.min.x + box.max.x) / 2; model.position.z -= (box.min.z + box.max.z) / 2; model.position.y -= box.min.y;
-  const tint = variant === 'b' ? new THREE.Color(1, .82, .66) : new THREE.Color(1, 1, 1).lerp(new THREE.Color(el ? EL[el].color : 0xffffff), .07);
+  const tint = variant === 'b' ? (id === 'kazan' ? new THREE.Color(.8, .85, 1) : new THREE.Color(1, .82, .66)) : id === 'kazan' ? new THREE.Color(1, 1, 1) : new THREE.Color(1, 1, 1).lerp(new THREE.Color(el ? EL[el].color : 0xffffff), .07);
   model.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.color.copy(tint); if (el) { o.material.emissive = new THREE.Color(EL[el].color); o.material.emissiveIntensity = .025; } o.castShadow = true; o.frustumCulled = false; } });
   const b = {}; for (const n of BONES) b[n] = model.getObjectByName('mixamorig' + n);
   const mixer = new THREE.AnimationMixer(model), actions = {};
-  for (const [n, c] of Object.entries(RAVEN_GLB.clips)) { const a = mixer.clipAction(c); if (['jump_up', 'land', 'hard_land', 'roll', 'run_stop'].includes(n)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; } actions[n] = a; }
+  for (const [n, c] of Object.entries(SRC.clips)) { const a = mixer.clipAction(c); if (['jump_up', 'land', 'hard_land', 'roll', 'run_stop'].includes(n)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; } actions[n] = a; }
   R.bodyMeshes.forEach(m => m.visible = false);
-  R.glb = { model, holder, mixer, actions, b, cur: null, retW: 0 };
+  R.glb = { model, holder, mixer, actions, b, cur: null, retW: 0, id };
   playClip(R.glb, 'idle', 0);
 }
 function playClip(G, name, fade = .18) {
@@ -1586,18 +1740,18 @@ function playAttack(G, clip, start, speed, key) {
   a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; a.paused = false; a.enabled = true; a.timeScale = speed; a.time = Math.max(0, start); a.play();
   G.cur = clip; G.key = key; return true;
 }
-const impactStart = (clip, hit, speed) => Math.max(0, ((META[clip] && META[clip].impact) || hit * speed) - hit * speed);
+const impactStart = (G, clip, hit, speed) => { const M = gmeta(G); return Math.max(0, ((M[clip] && M[clip].impact) || hit * speed) - hit * speed); };
 function animateGLB(f, dt, lz, lx, hs) {
   const R = f.rig, G = R.glb, st = f.state;
   let clip = G.cur, ret = true, drove = false;
   if (f.emote && st === 'idle') drove = playAttack(G, f.emote.clip, 0, 1, 'e' + f.emote.id);
-  else if (st === 'cast' && f.cast && f.cast.a.clip) { const a = f.cast.a; drove = playAttack(G, a.clip, impactStart(a.clip, a.rel, a.speed || 1), a.speed || 1, 'c' + f.castId); }
-  else if (st === 'melee' && f.melee) { const md = MELEE[f.melee.i]; drove = playAttack(G, md.clip, impactStart(md.clip, md.hit, md.speed), md.speed, 'm' + f.castId); }
+  else if (st === 'cast' && f.cast && f.cast.a.clip) { const a = f.cast.a; drove = playAttack(G, a.clip, impactStart(G, a.clip, a.rel, a.speed || 1), a.speed || 1, 'c' + f.castId); }
+  else if (st === 'melee' && f.melee) { const md = MELEE[f.melee.i]; drove = playAttack(G, md.clip, impactStart(G, md.clip, md.hit, md.speed), md.speed, 'm' + f.castId); }
   else if (st === 'hit') drove = playAttack(G, f.stun > .6 ? 'stunned' : 'hit', f.stun > .6 ? 0 : .05, f.stun > .6 ? 1.2 : 1.7, 'h' + f.hitId);
   else if (st === 'down' || st === 'ko') drove = playAttack(G, 'dying', 0, st === 'ko' ? 1.05 : 1.7, 'd' + f.downId);
   else if (st === 'getup') drove = playAttack(G, 'getup', .35, 2.6, 'g' + f.downId);
   else if (st === 'dash') drove = playAttack(G, 'roll2', .12, 3.4, 'r' + f.dashId);
-  else if (st === 'block') { drove = playAttack(G, 'block', ((META.block && META.block.impact) || 1.1) - .25, 1, 'b' + f.blockStart); const a = G.actions.block; if (a.time >= ((META.block && META.block.impact) || 1.1)) a.timeScale = 0; }
+  else if (st === 'block') { drove = playAttack(G, 'block', ((gmeta(G).block && gmeta(G).block.impact) || 1.1) - .25, 1, 'b' + f.blockStart); const a = G.actions.block; if (a.time >= ((gmeta(G).block && gmeta(G).block.impact) || 1.1)) a.timeScale = 0; }
   else if (st === 'win') drove = playAttack(G, 'victory', 0, 1, 'win');
   if (drove) { ret = false; clip = null; } else G.key = null;
   if (drove) { }
@@ -1656,7 +1810,10 @@ class Fighter {
     this.blockStyle = o.isMaster ? 'all' : o.el;
     this.rig = buildRig(o.isMaster ? 'hero' : 'raven', o.el ? EL[o.el].color : 0xffffff, o.el, o.variant || 'a');
     if (o.dummy) { this.isDummy = true; this.rig.root.traverse(m => { if (m.isMesh || m.isSprite || m.isPoints) m.visible = false; }); this.rig.root.add(this.dummyMesh = buildDummy()); this.wob = 0; this.wobV = 0; this.lastHitId = 0; }
-    else if (!o.isMaster && RAVEN_GLB) attachRavenGLB(this.rig, o.el, o.variant || 'a');
+    else if (!o.isMaster && CHAR_GLB[o.char || 'raven']) attachRavenGLB(this.rig, o.el, o.variant || 'a', o.char || 'raven');
+    this.charId = o.dummy ? 'dummy' : o.isMaster ? 'master' : (o.char || 'raven');
+    const CS = BAL.chars[this.charId] || BAL.chars.raven; this.maxHp = CS.hp; this.dashMax = CS.dashCD; this.comboDmg = CS.combo;
+    if (this.charId === 'kazan' && this.rig.glb) { const b = this.rig.glb.b; this.heatGlow = [b.LeftForeArm, b.LeftHand, b.RightHand].filter(Boolean).map((bn, i) => { this.rig.root.updateMatrixWorld(true); const ws = bn.getWorldScale(new V3()).x || 1; const g = glowSprite(0xff5a10, (i === 1 ? .6 : .45) / ws, 0); g.material.opacity = 0; bn.add(g); return g; }); }
     scene.add(this.rig.root);
     this.pos = new V3(); this.vel = new V3(); this.yaw = 0;
     this.pose = clonePose(BASE); this.poseV = {}; for (const n of JN) this.poseV[n] = [0, 0, 0]; this.poseV.hipsY = 0;
@@ -1666,7 +1823,7 @@ class Fighter {
   }
   blankIntent() { return { mx: 0, mz: 0, jump: false, jumpHeld: false, dash: false, melee: false, block: false, elems: [], ult: false, ability: null }; }
   reset(p) {
-    this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = BAL.hp; this.dispHp = 100; this.trailHp = 100; this.sts = { soak: 0, fort: 0, haste: 0, static: 0, ccImm: 0 }; this.icd = {}; this.mchain = 0; this.mchainT = -9; this.slowPct = .3; this.bufAb = null; this.castId = 0; this.hitId = 0; this.downId = 0; this.mana = CFG.MANA_MAX;
+    this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = this.maxHp || BAL.hp; this.dispHp = 100; this.heat = 0; this.heatT = 0; this.lavaAcc = 0; this.trailHp = 100; this.sts = { soak: 0, fort: 0, haste: 0, static: 0, ccImm: 0 }; this.icd = {}; this.mchain = 0; this.mchainT = -9; this.slowPct = .3; this.bufAb = null; this.castId = 0; this.hitId = 0; this.downId = 0; this.mana = CFG.MANA_MAX;
     this.state = 'idle'; this.st = 0; this.onGround = true; this.airJumps = this.maxAirJumps; this.airDash = 1; this.dashCD = 0;
     this.invuln = 0; this.stun = 0; this.combo = 0; this.lastComboHit = -9; this.burnT = 0; this.slowT = 0; this.blockFlash = 0; this.lastHit = -9;
     this.cast = null; this.melee = null; this.walkPh = 0; this.freezeT = 0; this.lastEl = 'fire'; this.dashFx = null; this.dashHit = false; this.landT = 0;
@@ -1681,7 +1838,7 @@ class Fighter {
   startDash(dir, spd = 22, dur = .24, fx = 'wind') {
     if (dir.lengthSq() < .01) dir.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.vel.x = dir.x * spd; this.vel.z = dir.z * spd; this.vel.y = this.onGround ? 1.5 : 0;
-    this.setState('dash'); this.dashDur = dur; this.invuln = Math.max(this.invuln, dur * .75); this.dashCD = BAL.dashCD; this.dashId = (this.dashId || 0) + 1; this.dashFx = fx; this.dashHit = false;
+    this.setState('dash'); this.dashDur = dur; this.invuln = Math.max(this.invuln, dur * .75); this.dashCD = this.dashMax || BAL.dashCD; this.dashId = (this.dashId || 0) + 1; this.dashFx = fx; this.dashHit = false;
     this.dashDir = dir.clone(); Sfx.play('dash'); FX.wind(this.pos.clone().setY(this.pos.y + .8), 10, .5, null, 1.2);
   }
   canCast() { return ['idle', 'air', 'block'].includes(this.state); }
@@ -1711,7 +1868,7 @@ class Fighter {
     if (step > 1 && (this.cds[name] || 0) > 0) { step = 1; name = e; }
     if (this.useAbility(name, opp, step > 1)) {
       this.chainEl = e; this.chainT = CFG.CHAIN_WINDOW; this.comboStep = step; markSlots(e);
-      if (step > 1) { Sfx.play('chain'); popText(this.pos.clone().setY(this.pos.y + 2.3), AB[name].hint, '#ffe9a0', 18); }
+      if (step > 1) { Sfx.play('chain'); if (this.isPlayer) popText(this.pos.clone().setY(this.pos.y + 2.3), AB[name].hint, '#ffe9a0', 18); }
       return true;
     }
     if (this.state === 'cast' || this.state === 'melee') { this.bufEl = e; this.bufT = .3; }
@@ -1731,6 +1888,7 @@ class Fighter {
     for (const k in this.cds) this.cds[k] = Math.max(0, this.cds[k] - dt);
     for (const k in this.sts) if (this.sts[k] > 0) this.sts[k] = Math.max(0, this.sts[k] - dt);
     for (const k in this.icd) this.icd[k] -= dt;
+    if (this.heat > 0) { this.heatT -= dt; if (this.heatT <= 0) this.heat = 0; }
     if (this.sts.haste > 0 && Math.random() < .3) FX.wind(this.pos.clone().setY(this.pos.y + rand(.2, 1)), 1, .3, null, .6);
     if (this.sts.soak > 0 && Math.random() < .25) FX.water(this.pos.clone().setY(this.pos.y + rand(.4, 1.8)), 1, .3, _v3.set(0, -1.5, 0), .6);
     if (this.sts.static > 0 && Math.random() < .2) { const c = this.pos.clone().setY(this.pos.y + rand(.4, 1.7)); boltFX(c, c.clone().add(_v3.randomDirection().multiplyScalar(.5)), 0xd0c4ff, .025, .07); }
@@ -1739,7 +1897,7 @@ class Fighter {
     this.mana = CFG.UNLIMITED_MANA ? CFG.MANA_MAX : Math.min(CFG.MANA_MAX, this.mana + CFG.MANA_REGEN * dt);
     if (this.burnT > 0) { this.burnT -= dt; if (this.hp > 1 && this.state !== 'ko') this.hp -= 2.2 * dt; FX.fire(this.pos.clone().setY(this.pos.y + rand(.3, 1.6)), 1, .3); }
     if (this.slowT > 0) { this.slowT -= dt; if (Math.random() < .3) PADD.emit(this.pos.x + rand(-.3, .3), this.pos.y + rand(.2, 1.6), this.pos.z + rand(-.3, .3), 0, -.3, 0, .6, 1, 1.6, .18, .5, 0, 0, .05, .7); }
-    if (this.heal && game.time - this.lastHit > 3 && this.hp < 100 && this.hp > 0) { this.hp = Math.min(100, this.hp + this.heal * dt); if (Math.random() < .15) FX.water(this.pos.clone().setY(this.pos.y + 1), 1, .4, _v1.set(0, 1.5, 0), .6); }
+    if (this.heal && game.time - this.lastHit > 3 && this.hp < this.maxHp && this.hp > 0) { this.hp = Math.min(this.maxHp, this.hp + this.heal * dt); if (Math.random() < .15) FX.water(this.pos.clone().setY(this.pos.y + 1), 1, .4, _v1.set(0, 1.5, 0), .6); }
     const slow = this.slowT > 0 ? 1 - this.slowPct : 1, haste = this.sts.haste > 0 ? 1 + BAL.el.wind.perk.pct : 1;
     const toOpp = _v1.copy(opp.pos).sub(this.pos).setY(0); const distOpp = toOpp.length();
     if (!['dash', 'down', 'ko'].includes(this.state) && distOpp > .05) { const ty = Math.atan2(toOpp.x, toOpp.z); this.yaw += angDiff(this.yaw, ty) * Math.min(1, dt * (this.state === 'cast' ? 20 : 12)); }
@@ -1764,7 +1922,7 @@ class Fighter {
         if (I.melee) { this.startMelee(0); break; }
         if (I.ult) { this.useAbility(this.isMaster ? 'avatar' : this.kit.superAb, opp); break; }
         if (!I.ability && this.bufAb && this.bufT > 0) I.ability = this.bufAb;
-        if (I.ability) { if (ELS.includes(I.ability)) this.pressElement(I.ability, opp); else if (!this.useAbility(I.ability, opp) && this.isPlayer && (this.cds[I.ability] || 0) > 0) btnDenied(I.ability); I.ability = null; this.bufAb = null; }
+        if (I.ability) { if (isBasic(this, I.ability)) this.pressElement(I.ability, opp); else if (!this.useAbility(I.ability, opp) && this.isPlayer && (this.cds[I.ability] || 0) > 0) btnDenied(I.ability); I.ability = null; this.bufAb = null; }
         if (!this.onGround && this.canGlide && I.jumpHeld && this.vel.y < 0) { this.vel.y = Math.max(this.vel.y, -2.2); if (Math.random() < .5) FX.wind(this.pos.clone(), 1, .5, _v2.set(0, -2, 0), .8); }
         break;
       }
@@ -1784,7 +1942,8 @@ class Fighter {
           if (d < md.reach && dy < 1.4 && fwd.dot(tp.normalize()) > .3 && !opp.ghost()) {
             const el = this.isMaster ? this.lastEl : this.el;
             const chainOk = m.i > 0 && game.time - this.mchainT < BAL.comboReset;
-            const r = applyHit(this, opp, { melee: true, dmg: BAL.combo[m.i], kb: md.kb, launch: md.launch, el, from: this.pos, heavy: md.heavy, castId: this.castId, third: m.i === 2 && chainOk && this.mchain >= 2 });
+            const molten = !!m.molten; const r = applyHit(this, opp, { melee: true, dmg: (this.comboDmg || BAL.combo)[m.i] + (molten ? KZ.heat.bonus : 0), kb: md.kb + (molten ? 3 : 0), launch: md.launch, slow: molten ? KZ.heat.slowDur : 0, slowPct: KZ.heat.slow, el, from: this.pos, heavy: md.heavy, castId: this.castId, third: m.i === 2 && chainOk && this.mchain >= 2 });
+            if (molten && r === 'hit') { kazanFx(opp.pos.clone(), false); popText(opp.pos.clone().setY(opp.pos.y + 2.4), 'MOLTEN!', '#ff8a3a', 24); }
             if (r === 'hit') { this.mchain = chainOk ? this.mchain + 1 : 1; this.mchainT = game.time; } else if (r !== 'miss') this.mchain = 0;
             FX.el(el, handPos(this, m.i === 2 ? 'R' : m.i === 0 ? 'L' : 'R'), 10, .25, null, .9);
           }
@@ -1801,7 +1960,7 @@ class Fighter {
         if (!this.onGround && !c.a.ult) this.vel.y = Math.max(this.vel.y, -1.2);
         if (c.a.ult) { this.vel.y = (this.castBaseY + 2.6 - this.pos.y) * 4; this.onGround = false; this.vel.x *= .9; this.vel.z *= .9; ELS.forEach((e, i) => { const a = game.time * 4 + i * Math.PI / 2; FX.el(e, _v2.set(this.pos.x + Math.cos(a) * 1.4, this.pos.y + 1.1 + Math.sin(a * 1.3) * .3, this.pos.z + Math.sin(a) * 1.4), 2, .1, null, 1.1); }); this.invuln = .2; }
         if (!c.fired && c.t >= c.a.rel) { c.fired = true; AB_CUR_POWER = c.a.power; c.a.fn(this, opp); AB_CUR_POWER = 1; }
-        if (c.t >= c.a.dur) { this.cast = null; this.setState(this.onGround ? 'idle' : 'air'); }
+        if (c.t >= (c.dur || c.a.dur)) { this.cast = null; this.setState(this.onGround ? 'idle' : 'air'); }
         break;
       }
       case 'hit': { this.stun -= dt; this.vel.x = damp(this.vel.x, 0, this.onGround ? 6 : 1, dt); this.vel.z = damp(this.vel.z, 0, this.onGround ? 6 : 1, dt); if (this.stun <= 0 && this.onGround) this.setState('idle'); break; }
@@ -1810,7 +1969,7 @@ class Fighter {
       case 'ko': { if (this.onGround) { this.vel.x = damp(this.vel.x, 0, 4, dt); this.vel.z = damp(this.vel.z, 0, 4, dt); } break; }
       case 'win': { this.vel.x = damp(this.vel.x, 0, 8, dt); this.vel.z = damp(this.vel.z, 0, 8, dt); break; }
     }
-    if (canControl) { this.handleElements(opp); if (I.ability && this.state === 'cast' && ELS.includes(I.ability)) this.pressElement(I.ability, opp); if (I.ability && !ELS.includes(I.ability) && (this.state === 'cast' || this.state === 'melee')) { this.bufAb = I.ability; this.bufT = .35; } }
+    if (canControl) { this.handleElements(opp); if (I.ability && this.state === 'cast' && isBasic(this, I.ability)) this.pressElement(I.ability, opp); if (I.ability && !isBasic(this, I.ability) && (this.state === 'cast' || this.state === 'melee')) { this.bufAb = I.ability; this.bufT = .35; } }
     if (this.state !== 'block' && this.blockWall) { this.blockWall.release = true; this.blockWall = null; this.wallCD = .7; }
     this.wallCD -= dt;
     if (this.shockT > 0) { this.shockT -= dt; if (Math.random() < .35) { const c = this.pos.clone().setY(this.pos.y + rand(.3, 1.7)); boltFX(c, c.clone().add(_v3.randomDirection().multiplyScalar(.6)), 0xc8b8ff, .03, .08); } }
@@ -1845,12 +2004,14 @@ class Fighter {
     if (this.state !== 'idle' && this.st > .35) this.setState('idle');
     const id = this.hitId + this.downId * 7; if (id !== this.lastHitId) { this.lastHitId = id; this.wobV += 6 + rand(0, 3); }
     if (this.home) this.pos.copy(this.home); this.vel.set(0, 0, 0); this.onGround = true;
-    if (game.time - this.lastHit > 2.5 && this.hp < BAL.hp) { this.hp = BAL.hp; FX.burst(this.pos.clone().setY(this.pos.y + 1.2), 'earth', 10, 3, .6); }
+    if (game.time - this.lastHit > 2.5 && this.hp < this.maxHp) { this.hp = this.maxHp; FX.burst(this.pos.clone().setY(this.pos.y + 1.2), 'earth', 10, 3, .6); }
     this.wobV += (-this.wob * 90 - this.wobV * 7) * dt; this.wob += this.wobV * dt;
     const R = this.rig; R.root.position.copy(this.pos); R.root.rotation.y = this.yaw; this.dummyMesh.userData.body.rotation.x = -this.wob * .12;
   }
   animate(dt, opp) { if (this.isDummy) return; return this.animate2(dt, opp); }
-  startMelee(i) { if (i === 0 && game.time - this.mchainT > BAL.comboReset) this.mchain = 0; this.melee = { i, done: false, queued: false }; this.castId = ++CAST_ID; this.setState('melee'); }
+  startMelee(i) { if (i === 0 && game.time - this.mchainT > BAL.comboReset) this.mchain = 0; this.melee = { i, done: false, queued: false };
+    if (i === 2 && this.charId === 'kazan' && this.heat >= KZ.heat.max) { this.melee.molten = true; this.heat = 0; this.heatT = 0; FX.burst(handPos(this, 'R'), 'fire', 24, 4, 1.2); Sfx.play('fire'); } // stacks are spent even if the hit misses
+    this.castId = ++CAST_ID; this.setState('melee'); }
   buildShieldFX() {
     const g = new THREE.Group(); this.rig.root.add(g); const bs = this.blockStyle, P = { g, rot: [] };
     const addM = (geo, m, y = 1) => { const o = new THREE.Mesh(geo, m); o.position.y = y; o.castShadow = false; g.add(o); return o; };
@@ -2017,6 +2178,7 @@ class Fighter {
     if (!this.isMaster && this.state !== 'ko' && Math.random() < .25) FX.el(this.el, handPos(this, Math.random() < .5 ? 'L' : 'R'), 1, .05, _v2.set(0, .5, 0), .45);
     if (this.isMaster && this.spirit >= 100 && Math.random() < .5) FX.el(pick(ELS), this.pos.clone().setY(this.pos.y + rand(.2, 1.8)), 1, .4, _v2.set(0, 1, 0), .6);
     if (this.isMaster && this.chainT > 0 && Math.random() < .5) FX.el(this.chainEl, handPos(this, 'R'), 1, .08, _v2.set(0, .6, 0), .5);
+    if (this.heatGlow) { const k = this.heat / KZ.heat.max; this.heatGlow.forEach((g, i) => { g.material.opacity = damp(g.material.opacity, k * (.55 + .2 * Math.sin(t * 9 + i)), 8, dt); }); if (this.heat >= KZ.heat.max && Math.random() < .5) FX.fire(handPos(this, 'L'), 1, .1, _v2.set(0, 1, 0), .8); }
     if (R.glb) animateGLB(this, dt, lz, lx, hs);
   }
 }
@@ -2035,6 +2197,7 @@ class AI {
     if (this.strafeT <= 0) { this.strafe = Math.random() < .5 ? -1 : 1; this.strafeT = rand(.9, 2.4); this.mood = Math.random() < .25 ? .4 : 1; }
     this.thinkT -= dt; if (this.thinkT <= 0) { this.thinkT = this.D.react * rand(.75, 1.25); this.think(tgt); }
     if (this.meleeChain > 0 && f.state === 'melee' && f.st > .12) { I.melee = true; this.meleeChain--; }
+    if (this.chainLeft > 0 && f.state === 'cast' && f.cast && f.cast.fired && f.cast.t > f.cast.a.rel + .05 && f.chainEl === this.kit.basic) { I.ability = this.kit.basic; this.chainLeft--; }
     if (this.move.lengthSq() > .01) { // steer around scenery
       for (const o of OBS) {
         if (o.walk && o.top < .6) continue;
@@ -2065,8 +2228,12 @@ class AI {
     const perp = _v2.set(-d.z, 0, d.x).clone().multiplyScalar(this.strafe);
     const free = ['idle', 'air', 'block'].includes(f.state);
     // 1) dangers: ground telegraphs, projectiles, waves, cyclones
-    for (const T of TELES) if (T.end > game.time && Math.hypot(f.pos.x - T.x, f.pos.z - T.z) < T.r + .6 && free) {
-      if (Math.random() < D.dodgeP + .15) { const aw = _v3.set(f.pos.x - T.x, 0, f.pos.z - T.z); if (aw.lengthSq() < .01) aw.copy(perp); this.dodge(aw.normalize()); return; }
+    for (const T of TELES) if (T.end > game.time && teleHit(T, f.pos.x, f.pos.z) && free) {
+      if (Math.random() < D.dodgeP + .15) { const aw = teleAway(T, f.pos.x, f.pos.z); if (aw.lengthSq() < .01) aw.copy(perp); this.dodge(aw.normalize()); return; }
+    }
+    for (const z of LAVA) if (z.owner !== f && free && inZone(z, f.pos) && Math.random() < .5 + D.dodgeP * .5) { // walk out of lava
+      const aw = z.kind === 'line' ? teleAway({ line: true, ax: z.a.x, az: z.a.z, bx: z.b.x, bz: z.b.z }, f.pos.x, f.pos.z) : new V3(f.pos.x - z.c.x, 0, f.pos.z - z.c.z);
+      this.move.copy(aw.lengthSq() > .01 ? aw.normalize() : perp); return;
     }
     let threat = null, tmin = 9;
     for (const p of PROJ) {
@@ -2094,13 +2261,13 @@ class AI {
     if (dist < 2.1 && f.onGround && Math.random() < aggr) { I.melee = true; this.meleeChain = Math.random() < D.follow ? 2 : Math.random() < .5 ? 1 : 0; return; }
     if (!blocked && this.pace <= 0 && Math.random() < aggr) {
       const opts = K.moves.filter(m => dist >= m[3] && dist <= m[4] && (f.cds[m[0]] || 0) <= 0);
-      if (opts.length) { let r = Math.random() * opts.reduce((s, m) => s + m[2], 0); for (const m of opts) { r -= m[2]; if (r <= 0) { I.ability = m[0]; this.pace = m[1] * rand(.8, 1.6) / D.aggr; return; } } }
+      if (opts.length) { let r = Math.random() * opts.reduce((s, m) => s + m[2], 0); for (const m of opts) { r -= m[2]; if (r <= 0) { I.ability = m[0]; this.pace = m[1] * rand(.8, 1.6) / D.aggr; if (m[0] === K.basic) this.chainLeft = Math.random() < D.follow ? 2 : Math.random() < .5 ? 1 : 0; return; } } }
     }
     // 3) movement: keep the element's preferred range, circle, use cover
     this.move.set(0, 0, 0);
     const pref = opening ? Math.min(K.pref, 2) : K.pref;
     if (blocked) this.move.copy(perp).addScaledVector(d, .6);
-    else if (dist > pref + 1.5) { this.move.copy(d); if (dist > pref + 8 && f.dashCD <= 0 && Math.random() < .2) I.dash = true; }
+    else if (dist > pref + 1.5) { this.move.copy(d); if (dist > pref + (K.pref < 4 ? 3.5 : 8) && f.dashCD <= 0 && Math.random() < (K.pref < 4 ? .35 : .2)) I.dash = true; }
     else if (dist < pref - 1.5) this.move.copy(d).multiplyScalar(-1);
     this.move.addScaledVector(perp, .75 * this.mood);
     const r0 = Math.hypot(f.pos.x, f.pos.z); if (r0 > CFG.ARENA_R - 2.5) this.move.addScaledVector(_v3.copy(f.pos).setY(0).normalize(), -1.4);
@@ -2115,7 +2282,7 @@ addEventListener('keyup', e => { KEYS[e.code] = false; });
 addEventListener('blur', () => { for (const k in KEYS) KEYS[k] = false; });
 const TOUCH = { mx: 0, mz: 0, btn: {}, pressed: new Set() };
 const MASTER_KEYS = [['KeyU', 'Digit1', 'fire'], ['KeyI', 'Digit2', 'water'], ['KeyO', 'Digit3', 'wind'], ['KeyP', 'Digit4', 'earth'], ['KeyL', 'Digit5', 'lightning']];
-const RAVEN_KEYS = [['KeyU', 'Digit1'], ['KeyI', 'Digit2']];
+const RAVEN_KEYS = [['KeyU', 'Digit1'], ['KeyI', 'Digit2'], ['KeyO', 'Digit3']];
 function readPlayerIntent() {
   const I = hero.intent; let x = 0, z = 0;
   if (KEYS.KeyA || KEYS.ArrowLeft) x -= 1; if (KEYS.KeyD || KEYS.ArrowRight) x += 1;
@@ -2134,11 +2301,12 @@ function readPlayerIntent() {
 const TBTN = {}, KSLOT = {};
 const ICON = n => `url(assets/ui/${n}.webp)`;
 function ctrlDefs() {
-  const el = hero.el, K = hero.kit;
+  const el = hero.el, K = hero.kit, kz = hero.charId === 'kazan';
   return [
     { code: 'KeyJ', key: 'J', icon: 'sk_fist', kind: 'melee', name: 'Combo' },
-    { code: 'KeyU', key: 'U', icon: 'sk_' + el, ab: K.btn[0][0], name: K.btn[0][1] },
-    { code: 'KeyI', key: 'I', icon: 'ic_' + el, ab: K.btn[1][0], name: K.btn[1][1] },
+    { code: 'KeyU', key: 'U', icon: kz ? 'sk_fire' : 'ic_' + el, ab: K.btn[0][0], kind: 'basic', name: K.btn[0][1] + ' (tap ×3)' },
+    { code: 'KeyI', key: 'I', icon: kz ? 'sk_fire' : 'sk_' + el, ab: K.btn[1][0], name: K.btn[1][1], tag: '1' },
+    { code: 'KeyO', key: 'O', icon: kz ? 'sk_earth' : 'sk_' + el, ab: K.btn[2][0], name: K.btn[2][1], tag: '2' },
     { code: 'KeyE', key: 'E', icon: 'sk_super', kind: 'super', ab: K.superAb, name: 'Super' },
     { code: 'ShiftLeft', key: 'Shift', icon: 'sk_dash', kind: 'dash', name: 'Dash' },
     { code: 'KeyK', key: 'K', icon: null, kind: 'block', name: 'Block' },
@@ -2146,11 +2314,11 @@ function ctrlDefs() {
   ];
 }
 // [right, bottom, size] in px from the bottom-right corner (landscape phone)
-const TOUCH_LAYOUT = { KeyJ: [18, 16, 98], KeyU: [128, 12, 68], KeyI: [114, 94, 68], KeyE: [204, 40, 62], Space: [26, 126, 62], ShiftLeft: [36, 198, 54], KeyK: [196, 116, 56] };
+const TOUCH_LAYOUT = { KeyU: [18, 16, 98], KeyJ: [128, 12, 64], KeyI: [114, 88, 64], KeyO: [34, 126, 62], KeyE: [202, 50, 60], KeyK: [198, 124, 54], Space: [110, 166, 54], ShiftLeft: [36, 200, 52] };
 function slotEl(d, cls) {
   const b = document.createElement('div'); b.className = cls + (d.icon ? '' : ' shieldIc');
   if (d.icon) b.style.backgroundImage = ICON(d.icon);
-  b.innerHTML = '<i class="cd"></i><span class="t"></span>' + (cls === 'ks' ? `<kbd>${d.key}</kbd>` : '');
+  b.innerHTML = '<i class="cd"></i><span class="t"></span>' + (d.tag ? `<b class="tg">${d.tag}</b>` : '') + (d.kind === 'basic' ? '<s class="pips"><i></i><i></i><i></i></s>' : '') + (cls === 'ks' ? `<kbd>${d.key}</kbd>` : '');
   b._cd = b.querySelector('.cd'); b._t = b.querySelector('.t'); b._p = -1; b._tx = ''; b.title = d.name;
   return b;
 }
@@ -2180,9 +2348,10 @@ function buildTouch() {
   zone.addEventListener('pointerup', endJ); zone.addEventListener('pointercancel', endJ);
 }
 function slotState(d) {
+  if (d.kind === 'basic') { const st = hero.chainT > 0 && hero.chainEl === d.ab ? hero.comboStep : 0; return [0, '', false, st]; }
   if (d.ab && d.kind !== 'super') { const cd = hero.cds[d.ab] || 0; return [cd / AB[d.ab].cd * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
   if (d.kind === 'super') return [100 - hero.spirit, '', hero.spirit >= 100];
-  if (d.kind === 'dash') { const cd = Math.max(0, hero.dashCD); return [cd / BAL.dashCD * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
+  if (d.kind === 'dash') { const cd = Math.max(0, hero.dashCD); return [cd / (hero.dashMax || BAL.dashCD) * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
   return [0, '', false];
 }
 function updateControls() {
@@ -2191,6 +2360,7 @@ function updateControls() {
     if (pp !== b._p) { b._p = pp; b._cd.style.setProperty('--p', pp + '%'); }
     if (tx !== b._tx) { b._tx = tx; b._t.textContent = tx; }
     if (rdy !== b._r) { b._r = rdy; b.classList.toggle('ready', rdy); }
+    const st = slotState(d)[3]; if (st !== undefined && st !== b._st) { b._st = st; b.querySelectorAll('.pips i').forEach((p, k) => p.classList.toggle('on', k < st)); }
   }
 }
 function btnDenied(name) { for (const M of [TBTN, KSLOT]) for (const c in M) if (M[c].ab === name) { const b = M[c].b; b.classList.remove('deny'); void b.offsetWidth; b.classList.add('deny'); } }
@@ -2253,16 +2423,16 @@ const HUD = {
   combo: $('#combo'), ann: $('#announce'), arrow: $('#offArrow'), mark: $('#enemyMark'), train: $('#trainInfo'),
 };
 // status icons: [icon, good/bad]
-const ST_DEF = { soak: ['ic_water', 'bad', 'Soaked: +10% damage taken'], static: ['ic_lightning', 'bad', 'Static: next combo hit +30'], slow: [null, 'bad', 'Slowed', '❄'], fort: ['ic_earth', 'good', 'Fortified: −20% damage taken'], haste: ['ic_wind', 'good', 'Haste: +12% speed'], ccImm: [null, 'good', 'Immune to forced displacement', '⛨'] };
+const ST_DEF = { heat: ['ic_fire', 'good', 'Magma Heat stacks (3 = Molten 3rd combo hit)'], soak: ['ic_water', 'bad', 'Soaked: +10% damage taken'], static: ['ic_lightning', 'bad', 'Static: next combo hit +30'], slow: [null, 'bad', 'Slowed', '❄'], fort: ['ic_earth', 'good', 'Fortified: −20% damage taken'], haste: ['ic_wind', 'good', 'Haste: +12% speed'], ccImm: [null, 'good', 'Immune to forced displacement', '⛨'] };
 function hudStatuses(i, f) {
-  const act = []; for (const k in ST_DEF) { const v = k === 'slow' ? f.slowT : f.sts[k]; if (v > 0) act.push([k, Math.ceil(v)]); }
+  const act = []; for (const k in ST_DEF) { if (k === 'heat') { if (f.heat > 0) act.push([k, f.heat]); continue; } const v = k === 'slow' ? f.slowT : f.sts[k]; if (v > 0) act.push([k, Math.ceil(v)]); }
   const key = act.map(a => a.join(':')).join(','); if (key === HUD.statKey[i]) return; HUD.statKey[i] = key;
   HUD.stats[i].innerHTML = act.map(([k, s]) => { const D = ST_DEF[k]; return `<div class="st ${D[1]} ${D[0] ? '' : 'txt'}" title="${D[2]}" style="${D[0] ? `background-image:${ICON(D[0])}` : ''}">${D[3] || ''}<b>${s}</b></div>`; }).join('');
 }
 function hudUpdate(dt) {
   [hero, enemy].forEach((f, i) => {
-    f.dispHp = damp(f.dispHp, f.hp / BAL.hp * 100, 18, dt); f.trailHp = f.trailHp > f.dispHp ? damp(f.trailHp, f.dispHp, 2.2, dt) : f.dispHp;
-    HUD.hp[i].style.width = f.dispHp + '%'; HUD.tr[i].style.width = f.trailHp + '%'; HUD.hp[i].classList.toggle('low', f.hp < BAL.hp * .3);
+    f.dispHp = damp(f.dispHp, f.hp / f.maxHp * 100, 18, dt); f.trailHp = f.trailHp > f.dispHp ? damp(f.trailHp, f.dispHp, 2.2, dt) : f.dispHp;
+    HUD.hp[i].style.width = f.dispHp + '%'; HUD.tr[i].style.width = f.trailHp + '%'; HUD.hp[i].classList.toggle('low', f.hp < f.maxHp * .3);
     const t = Math.ceil(f.hp) + ''; if (HUD.hpTxt[i].textContent !== t) HUD.hpTxt[i].textContent = t;
     HUD.sp[i].firstElementChild.style.width = f.spirit + '%'; HUD.sp[i].classList.toggle('full', f.spirit >= 100);
     [...HUD.wins[i].children].forEach((b, k) => b.classList.toggle('on', game.wins[i] > k));
@@ -2299,15 +2469,17 @@ function updateDmg(dt) {
 // ---------------------------------------------------------------- ROSTER / PROFILE (add characters & skins here)
 const ROSTER = [
   { id: 'raven', name: 'Raven', short: 'RAVEN', title: 'Shadow of the Five Elements', img: 'assets/p_raven.jpg', available: true, about: 'A shadow ninja who masters one element per fight. Pick the element before the match.' },
+  { id: 'kazan', name: 'Kazan', short: 'KAZAN', title: 'Lord of Magma', img: 'assets/p_kazan.jpg', available: true, legendary: true, fixedEl: 'Magma', about: 'A heavy volcanic warrior: he controls the ground with lava and punishes up close. Slower and easier to dodge than Raven, but his skills leave burning ground behind.' },
   { id: 'master', name: 'Elemental Master', short: 'MASTER', title: 'Wielder of all five', img: 'assets/p_hero.jpg', available: false },
   { id: 'soon_a', name: 'Unknown', available: false }, { id: 'soon_b', name: 'Unknown', available: false },
-  { id: 'soon_c', name: 'Unknown', available: false }, { id: 'soon_d', name: 'Unknown', available: false },
+  { id: 'soon_c', name: 'Unknown', available: false },
 ];
-const SKINS = { raven: [{ id: 'default', name: 'Shadow Garb', available: true, img: 'assets/full_raven.jpg' }, { id: 'ember', name: 'Ember Garb', available: false }, { id: 'tide', name: 'Tide Garb', available: false }, { id: 'storm', name: 'Storm Garb', available: false }] };
+const SKINS = { kazan: [{ id: 'default', name: 'Volcanic Garb', available: true, img: 'assets/full_kazan.jpg' }, { id: 'obsidian', name: 'Obsidian Garb', available: false }, { id: 'ash', name: 'Ash Garb', available: false }, { id: 'inferno', name: 'Inferno Garb', available: false }], raven: [{ id: 'default', name: 'Shadow Garb', available: true, img: 'assets/full_raven.jpg' }, { id: 'ember', name: 'Ember Garb', available: false }, { id: 'tide', name: 'Tide Garb', available: false }, { id: 'storm', name: 'Storm Garb', available: false }] };
 const availableChars = () => ROSTER.filter(c => c.available);
 const PROFILE = { char: 'raven', el: 'fire', skin: 'default', opp: { char: 'random', el: 'random' }, diff: 'normal', mode: 'versus' };
 try { const p = JSON.parse(localStorage.getItem('ea_profile') || '{}'); Object.assign(PROFILE, p, { opp: Object.assign({}, PROFILE.opp, p.opp) }); } catch (e) { }
 if (!ROSTER.find(c => c.id === PROFILE.char && c.available)) PROFILE.char = availableChars()[0].id;
+const skinOf = id => (PROFILE.skins = PROFILE.skins || {})[id] || 'default';
 if (PROFILE.opp.char !== 'random' && !ROSTER.find(c => c.id === PROFILE.opp.char && c.available)) PROFILE.opp.char = 'random';
 if (!ELS.includes(PROFILE.el)) PROFILE.el = 'fire';
 function saveProfile() { try { localStorage.setItem('ea_profile', JSON.stringify(PROFILE)); } catch (e) { } }
@@ -2317,11 +2489,12 @@ const game = { state: 'loading', mode: 'lobby', time: 0, rdt: 0, timer: CFG.ROUN
   sel: { p: { char: 'raven', el: 'fire' }, ai: { char: 'raven', el: 'fire' } }, stats: { dealt: 0, taken: 0, maxCombo: 0, comboDmg: 0 } };
 let hero, enemy, ai;
 const START_H = new V3(0, 0, 11), START_E = new V3(0, 0, -11);
-const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : `Raven · ${EL[f.el].name}`;
+const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : f.charId === 'kazan' ? 'Kazan · Magma' : `Raven · ${EL[f.el].name}`;
 function makeFighter(sel, isPlayer, variant) {
   if (sel.char === 'dummy') return new Fighter({ name: 'Training Dummy', dummy: true, el: 'earth', kit: RAVEN_KITS.earth });
   if (sel.char === 'master') { const K = MASTER_KIT; return new Fighter({ name: 'Elemental Master', isMaster: true, isPlayer, kit: K, speed: K.speed, airJumps: 1, glide: true, variant }); }
-  const K = RAVEN_KITS[sel.el]; return new Fighter({ name: 'Raven', isMaster: false, isPlayer, el: sel.el, kit: K, speed: K.speed, armor: K.armor, airJumps: K.airJumps, glide: K.glide, heal: K.heal, variant });
+  if (sel.char === 'kazan') { const K = KAZAN_KIT; return new Fighter({ name: 'Kazan', char: 'kazan', isMaster: false, isPlayer, el: 'fire', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
+  const K = RAVEN_KITS[sel.el]; return new Fighter({ name: 'Raven', char: 'raven', isMaster: false, isPlayer, el: sel.el, kit: K, speed: K.speed, armor: K.armor, airJumps: K.airJumps, glide: K.glide, heal: K.heal, variant });
 }
 function disposeFighter(f) { if (!f) return; scene.remove(f.rig.root); f.rig.root.traverse(o => { if (o.isMesh && o.material && o.material.dispose && f.rig.glb && o.isSkinnedMesh) o.material.dispose(); }); }
 function setupFighters() {
@@ -2330,13 +2503,13 @@ function setupFighters() {
   hero = makeFighter(p, true, 'a'); enemy = makeFighter(a, false, mirror ? 'b' : 'a');
   ai = enemy.isDummy ? null : new AI(enemy, enemy.kit, game.diff);
   $('#pb0 .pname').textContent = fighterLabel(hero) + ' (YOU)'; $('#pb1 .pname').textContent = fighterLabel(enemy) + (enemy.isDummy ? '' : ` · ${game.diff.toUpperCase()}`);
-  const por = f => f.isDummy ? 'none' : `url(assets/${f.isMaster ? 'p_hero' : 'p_raven'}.jpg)`;
+  const por = f => f.isDummy ? 'none' : `url(assets/${f.isMaster ? 'p_hero' : 'p_' + f.charId}.jpg)`;
   $('#pb0 .portrait').style.backgroundImage = por(hero); $('#pb1 .portrait').style.backgroundImage = por(enemy);
   $('#pb1 .portrait').style.background = enemy.isDummy ? 'radial-gradient(circle,#8a6a3a,#3a2a14)' : '';
   if (!enemy.isDummy) $('#pb1 .portrait').style.backgroundImage = por(enemy);
   buildControls();
 }
-function clearField() { for (const p of PROJ) killProj(p, false); PROJ.length = 0; for (const w of WALLS) scene.remove(w.mesh); WALLS.length = 0; TIMERS.length = 0; TELES.length = 0; }
+function clearField() { for (const p of PROJ) killProj(p, false); PROJ.length = 0; for (const w of WALLS) scene.remove(w.mesh); WALLS.length = 0; TIMERS.length = 0; TELES.length = 0; clearLava(); }
 function trainingSpots() { const s = ARENA.dummySpot; const c = new V3(-s.x, 0, -s.z).normalize(); return [new V3(s.x, .38, s.z).addScaledVector(c, 7.5).setY(0), new V3(s.x, .38, s.z)]; }
 function startRound() {
   clearField();
@@ -2360,7 +2533,7 @@ function updateFlow(dt) {
     if (!tr && game.phaseT > (game.round === 1 ? 1.8 : 1.2) && !game.gongHit) { game.gongHit = true; Sfx.play('gong'); if (ARENA.gong) ARENA.gong.vel = 1.2; }
     if (game.phaseT > (tr ? .8 : game.round === 1 ? 2.4 : 1.8)) { game.state = 'fight'; if (!tr) announce('FIGHT!'); }
   } else if (game.state === 'fight') {
-    if (game.mode === 'training') { hero.spirit = Math.min(100, hero.spirit + 9 * dt); if (hero.hp < BAL.hp && game.time - hero.lastHit > 2) hero.hp = BAL.hp; }
+    if (game.mode === 'training') { hero.spirit = Math.min(100, hero.spirit + 9 * dt); if (hero.hp < hero.maxHp && game.time - hero.lastHit > 2) hero.hp = hero.maxHp; }
     else { game.timer -= dt; if (game.timer <= 0) { game.timer = 0; timeUp(); } }
   }
   else if (game.state === 'ko') {
@@ -2377,6 +2550,7 @@ function endMatch() {
   $('#endScreen').classList.remove('hidden'); showHUD(false);
 }
 function tipFor(f) {
+  if (f.charId === 'kazan') return 'Kazan’s skills have long wind-ups: watch for the red line or circle and step out sideways, then punish him while he recovers. Never stand in his lava.';
   return { fire: 'Inferno Blast shows a red circle first — dash out of it. Fire heals a little on skill hits, so trade with combos.', water: 'Don’t eat the 3rd combo hit: it soaks you (+10% damage taken). Jump over the Wave.', wind: 'Air Blade is fast but light — block it. Walk out of the Cyclone sideways, its pull is weak.', earth: 'Rock Shot is slow: dash sideways. Walk around the Stone Wall instead of shooting into it.', lightning: 'Break line of sight with pillars to stop Chain Lightning, and keep moving during Thunderstorm.' }[f.el] || 'Keep moving and block the big shots.';
 }
 function showHUD(on) {
@@ -2390,13 +2564,14 @@ function showHUD(on) {
 function goFullscreen() { try { if (IS_TOUCH && !STANDALONE && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => { })).catch(() => { }); } catch (e) { } }
 function resolveOpponent() {
   const o = PROFILE.opp; const ch = o.char === 'random' ? pick(availableChars()).id : o.char;
-  game.sel.ai = { char: ch, el: o.el === 'random' ? pick(ELS) : o.el };
+  game.sel.ai = { char: ch, el: ch === 'kazan' ? 'fire' : o.el === 'random' ? pick(ELS) : o.el };
 }
-function beginMatch(mode, reroll = true) {
+async function beginMatch(mode, reroll = true) {
   Sfx.init(); Sfx.play('select'); goFullscreen();
   game.mode = mode; game.diff = PROFILE.diff;
-  game.sel.p = { char: PROFILE.char, el: PROFILE.el };
+  game.sel.p = { char: PROFILE.char, el: PROFILE.char === 'kazan' ? 'fire' : PROFILE.el };
   if (mode === 'training') game.sel.ai = { char: 'dummy' }; else if (reroll) resolveOpponent();
+  if (!(await ensureChars([game.sel.p.char, game.sel.ai.char]))) return;
   $('#lobby').classList.remove('on'); $('#lobby').classList.add('hidden'); $('#endScreen').classList.add('hidden'); $('#pause').classList.add('hidden');
   game.stats = { dealt: 0, taken: 0, maxCombo: 0, comboDmg: 0 };
   if (ARENA.lobbyPad) ARENA.lobbyPad.visible = false; if (ARENA.lobbyKey) ARENA.lobbyKey.visible = false;
@@ -2429,8 +2604,8 @@ function bindSettings(root, rerender) {
   root.querySelectorAll('[data-vib]').forEach(b => b.onclick = () => { SETTINGS.vibrate = b.dataset.vib === 'on'; saveSettings(); re(); });
 }
 function controlsHTML() {
-  if (IS_TOUCH) return `<b>Move:</b> left thumb anywhere on the left side · <b>Fist</b> ×3 = combo (35·35·50) · <b>Skill buttons</b> = your element's two skills · <b>Sun</b> = super when the blue bar is full · <b>Dash</b> (5 s cooldown) · <b>Shield</b> hold to block — raise it just before a projectile hits to reflect it.`;
-  return `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (5 s) · <kbd>J</kbd> ×3 combo (35·35·50) · <kbd>U</kbd> skill 1 · <kbd>I</kbd> skill 2 · <kbd>E</kbd> super (blue bar full) · hold <kbd>K</kbd> block — raise it just before a projectile hits to <b>reflect</b> it · <kbd>Esc</kbd> pause`;
+  if (IS_TOUCH) return `<b>Move:</b> left thumb anywhere on the left side · <b>Big element button</b> ×3 = 3 different element shots · <b>Fist</b> ×3 = close combo · <b>Skill buttons 1 & 2</b> = your two skills · <b>Sun</b> = super when the blue bar is full · <b>Dash</b> (5 s cooldown) · <b>Shield</b> hold to block — raise it just before a projectile hits to reflect it.`;
+  return `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (5 s) · <kbd>U</kbd> ×3 element attack (3 different shots) · <kbd>J</kbd> ×3 close combo · <kbd>I</kbd> skill 1 · <kbd>O</kbd> skill 2 · <kbd>E</kbd> super (blue bar full) · hold <kbd>K</kbd> block — raise it just before a projectile hits to <b>reflect</b> it · <kbd>Esc</kbd> pause`;
 }
 
 // ---------------------------------------------------------------- LOBBY
@@ -2455,8 +2630,14 @@ function initLobby() {
   $('#pauseBtn').onclick = togglePause;
   if (IS_TOUCH) buildTouch();
 }
+function ensureChars(ids) { // downloads any fighter that is not on the phone yet, with a visible progress bar
+  const need = [...new Set(ids)].filter(id => (id === 'raven' || id === 'kazan') && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
+  const ov = $('#charLoad'); ov.classList.remove('hidden'); const pr = {}; const upd = () => { const v = need.reduce((a, id) => a + (pr[id] || 0), 0) / need.length; $('#charLoadBar').style.width = Math.round(v * 100) + '%'; $('#charLoadTxt').textContent = `Summoning ${need.map(n => n[0].toUpperCase() + n.slice(1)).join(' & ')}… ${Math.round(v * 100)}%`; };
+  upd(); return Promise.all(need.map(id => loadCharGLB(id, p => { pr[id] = p; upd(); }))).then(r => { ov.classList.add('hidden'); if (r.includes(false)) { toast('Download failed — check your connection'); return false; } return true; });
+}
 function lobbyShowcase() {
-  game.sel.p = { char: PROFILE.char, el: PROFILE.el }; game.sel.ai = { char: PROFILE.char, el: PROFILE.el };
+  const el = PROFILE.char === 'kazan' ? 'fire' : PROFILE.el;
+  game.sel.p = { char: PROFILE.char, el }; game.sel.ai = { char: PROFILE.char, el };
   game.diff = PROFILE.diff; setupFighters(); enemy.rig.root.visible = false;
   const s = ARENA.lobbySpot; hero.reset(new V3(s.x, ARENA.lobbyTop, s.z)); hero.onGround = true;
 }
@@ -2465,6 +2646,13 @@ function toLobby() {
   ['#pause', '#endScreen'].forEach(s => $(s).classList.add('hidden')); showHUD(false); clearField();
   lobbyShowcase(); LOBBY.tab = null; renderLobby();
   const L = $('#lobby'); L.classList.remove('hidden'); requestAnimationFrame(() => L.classList.add('on'));
+}
+async function selectChar(id) {
+  if (PROFILE.char === id) return; Sfx.play('select');
+  if (!(await ensureChars([id]))) return;
+  PROFILE.char = id; PROFILE.skin = skinOf(id); saveProfile(); const y = LOBBY.yaw; lobbyShowcase(); LOBBY.yaw = y;
+  const c = ROSTER.find(x => x.id === id); if (c.legendary) { FX.burst(hero.pos.clone().setY(hero.pos.y + 1), 'fire', 60, 7, 1.5); fb('fire_ring', { pos: hero.pos.clone().setY(hero.pos.y + .1), size: 4.5 }); Sfx.play('explode'); shake(.2); playEmote('hurricane'); }
+  renderLobby();
 }
 function setElement(e) {
   if (PROFILE.el === e) return; PROFILE.el = e; saveProfile(); Sfx.play('select');
@@ -2475,9 +2663,9 @@ function setElement(e) {
 function renderLobby() {
   document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('sel', b.dataset.nav === LOBBY.nav));
   const ch = ROSTER.find(c => c.id === PROFILE.char);
-  $('#heroName').textContent = ch.name.toUpperCase();
-  const he = $('#heroEl'); he.querySelector('i').style.backgroundImage = elIcon(PROFILE.el); he.querySelector('span').textContent = EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
-  he.style.borderColor = '#' + new THREE.Color(EL[PROFILE.el].color).getHexString();
+  $('#heroName').innerHTML = ch.name.toUpperCase() + (ch.legendary ? '<span class="legend">LEGENDARY</span>' : '');
+  const he = $('#heroEl'), fixed = ch.fixedEl; he.querySelector('i').style.backgroundImage = elIcon(fixed ? 'fire' : PROFILE.el); he.querySelector('span').textContent = fixed ? 'MAGMA · FIRE + EARTH' : EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
+  he.style.borderColor = fixed ? '#ff7a2a' : '#' + new THREE.Color(EL[PROFILE.el].color).getHexString();
   const B = $('#sideBody'), F = $('#sideFoot'), H = $('#sideHead');
   const elRow = (cur, attr, withRnd) => `<div class="els lbl">${ELS.map(e => `<button class="elb ${cur === e ? 'sel' : ''}" ${attr}="${e}" style="background-image:${elIcon(e)}" aria-label="${EL[e].name}"><small>${EL[e].name.toUpperCase()}</small></button>`).join('')}${withRnd ? `<button class="elb rnd ${cur === 'random' ? 'sel' : ''}" ${attr}="random" aria-label="Random">?<small>RANDOM</small></button>` : ''}</div>`;
   const seg = (attr, opts, cur) => `<div class="row">${opts.map(([v, t, dis]) => `<button class="gbtn ${cur === v ? 'sel' : ''} ${dis ? 'dis' : ''}" ${attr}="${v}" ${dis ? 'data-locked="1"' : ''}>${t}</button>`).join('')}</div>`;
@@ -2485,13 +2673,13 @@ function renderLobby() {
   if (LOBBY.nav === 'home') {
     H.textContent = 'BATTLE SETUP';
     const oppChars = [['random', 'RANDOM'], ...ROSTER.filter(c => c.id.indexOf('soon') !== 0).map(c => [c.id, (c.available ? '' : '🔒 ') + c.short, !c.available])];
-    B.innerHTML = `<div class="sec"><label>FIGHTER</label><div class="fcard"><div class="pt" style="background-image:url(${ch.img})"></div><div><b>${ch.name.toUpperCase()}</b><span>${ch.title} · Skin: ${SKINS[ch.id].find(s => s.id === PROFILE.skin).name}</span></div></div></div>
-      <div class="sec"><label>YOUR ELEMENT</label>${elRow(PROFILE.el, 'data-el')}</div>
+    B.innerHTML = `<div class="sec"><label>FIGHTER</label><div class="fcard"><div class="pt" style="background-image:url(${ch.img})"></div><div><b>${ch.name.toUpperCase()}</b><span>${ch.title} · Skin: ${SKINS[ch.id].find(s => s.id === skinOf(ch.id)).name}</span></div></div></div>
+      ${ch.fixedEl ? `<div class="sec"><label>ELEMENT</label><div class="fcard magma"><div class="pt" style="background-image:${elIcon('fire')};border-radius:50%"></div><div><b>MAGMA</b><span>Fire + Earth — Kazan's own element, fixed.</span></div></div></div>` : `<div class="sec"><label>YOUR ELEMENT</label>${elRow(PROFILE.el, 'data-el')}</div>`}
       <div class="sec"><label>OPPONENT</label>${seg('data-oc', oppChars, PROFILE.opp.char)}</div>
-      <div class="sec"><label>OPPONENT ELEMENT</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>
+      ${PROFILE.opp.char === 'kazan' ? '' : `<div class="sec"><label>OPPONENT ELEMENT${PROFILE.opp.char === 'random' ? ' (IF RAVEN)' : ''}</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>`}
       <div class="sec"><label>AI DIFFICULTY</label>${seg('data-d', [['easy', 'EASY'], ['normal', 'NORMAL'], ['hard', 'HARD']], PROFILE.diff)}</div>
       <div class="sec"><label>MODE</label>${seg('data-mode', [['versus', 'VERSUS AI'], ['training', 'TRAINING']], PROFILE.mode)}</div>`;
-    const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
+    const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${PROFILE.opp.char === 'kazan' ? 'MAGMA' : PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
     playFoot('PLAY', oppTxt);
   } else if (LOBBY.nav === 'chars') {
     H.textContent = 'CHARACTERS';
@@ -2499,13 +2687,13 @@ function renderLobby() {
       const eq = c.id === PROFILE.char, frm = eq ? 'card_green' : c.available ? 'card_gold' : 'card_gray';
       const art = c.img ? `<div class="art" style="background-image:url(${c.img})"></div>` : `<div class="sil">${SIL_SVG}</div>`;
       const tag = eq ? '<span class="tag eq">EQUIPPED</span>' : c.available ? '<span class="tag">SELECT</span>' : '<span class="tag">🔒 COMING SOON</span>';
-      return `<div class="ccard ${c.available ? '' : 'locked'}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(PROFILE.el)}"></div>` : ''}${tag}</div>`;
+      return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? 'fire' : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
     }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">More fighters are on the way. Locked fighters can’t be picked and never appear as a random opponent.</p>`;
     F.innerHTML = '';
   } else if (LOBBY.nav === 'inv') {
     H.textContent = 'INVENTORY';
     B.innerHTML = `<div class="sec"><label>${ch.name.toUpperCase()} · SKINS</label><div class="grid2">${SKINS[ch.id].map(s => {
-      const eq = s.id === PROFILE.skin, frm = eq ? 'card_green' : s.available ? 'card_gold' : 'card_gray';
+      const eq = s.id === skinOf(ch.id), frm = eq ? 'card_green' : s.available ? 'card_gold' : 'card_gray';
       return `<div class="ccard ${s.available ? '' : 'locked'}" data-skin="${s.id}">${s.img ? `<div class="art" style="background-image:url(${s.img});background-position:center 12%"></div>` : `<div class="sil">${SIL_SVG}</div><div class="nm">${s.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? '<span class="tag eq">EQUIPPED</span>' : s.available ? '<span class="tag">EQUIP</span>' : '<span class="tag">🔒 COMING SOON</span>'}</div>`;
     }).join('')}</div></div>`;
     F.innerHTML = '';
@@ -2524,8 +2712,8 @@ function renderLobby() {
   B.querySelectorAll('[data-oc]').forEach(b => b.onclick = () => { if (b.dataset.locked) { toast('Coming soon'); return; } PROFILE.opp.char = b.dataset.oc; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { PROFILE.diff = b.dataset.d; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { PROFILE.mode = b.dataset.mode; saveProfile(); Sfx.play('select'); renderLobby(); });
-  B.querySelectorAll('[data-char]').forEach(b => b.onclick = () => { const c = ROSTER.find(x => x.id === b.dataset.char); if (!c.available) { toast('Coming soon'); return; } PROFILE.char = c.id; saveProfile(); renderLobby(); });
-  B.querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { const s = SKINS[PROFILE.char].find(x => x.id === b.dataset.skin); if (!s.available) { toast('Coming soon'); return; } PROFILE.skin = s.id; saveProfile(); renderLobby(); });
+  B.querySelectorAll('[data-char]').forEach(b => b.onclick = () => { const c = ROSTER.find(x => x.id === b.dataset.char); if (!c.available) { toast('Coming soon'); return; } selectChar(c.id); });
+  B.querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { const s = SKINS[PROFILE.char].find(x => x.id === b.dataset.skin); if (!s.available) { toast('Coming soon'); return; } (PROFILE.skins = PROFILE.skins || {})[PROFILE.char] = s.id; PROFILE.skin = s.id; saveProfile(); renderLobby(); });
   const pb = $('#playBtn'); if (pb) pb.onclick = () => beginMatch(LOBBY.nav === 'train' ? 'training' : PROFILE.mode);
   renderTab();
 }
@@ -2533,16 +2721,27 @@ function renderTab() {
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('sel', b.dataset.tab === LOBBY.tab));
   const P = $('#tabPop'); P.classList.toggle('on', !!LOBBY.tab); if (!LOBBY.tab) return;
   if (LOBBY.tab === 'outfit') {
-    P.innerHTML = `<h4>OUTFIT</h4><div class="strip">${SKINS[PROFILE.char].map(s => `<button class="gbtn ${s.id === PROFILE.skin ? 'sel' : ''} ${s.available ? '' : 'dis'}" data-skin2="${s.id}">${s.available ? '' : '🔒 '}${s.name.toUpperCase()}</button>`).join('')}</div>`;
+    P.innerHTML = `<h4>OUTFIT</h4><div class="strip">${SKINS[PROFILE.char].map(s => `<button class="gbtn ${s.id === skinOf(PROFILE.char) ? 'sel' : ''} ${s.available ? '' : 'dis'}" data-skin2="${s.id}">${s.available ? '' : '🔒 '}${s.name.toUpperCase()}</button>`).join('')}</div>`;
     P.querySelectorAll('[data-skin2]').forEach(b => b.onclick = () => { const s = SKINS[PROFILE.char].find(x => x.id === b.dataset.skin2); if (!s.available) { toast('Coming soon'); return; } PROFILE.skin = s.id; saveProfile(); renderLobby(); });
   } else if (LOBBY.tab === 'emotes') {
-    const E = [['victory', 'VICTORY'], ['victory2', 'TRIUMPH'], ['power_up', 'POWER UP'], ['hurricane', 'WHIRLWIND']];
+    const E = PROFILE.char === 'kazan' ? [['victory', 'VICTORY'], ['victory2', 'FIST PUMP'], ['hurricane', 'ROAR OF MAGMA'], ['power_up', 'EMBER BREATH'], ['kick', 'KICK']] : [['victory', 'VICTORY'], ['victory2', 'TRIUMPH'], ['power_up', 'POWER UP'], ['hurricane', 'WHIRLWIND']];
     P.innerHTML = `<h4>EMOTES</h4><div class="strip">${E.filter(e => hero.rig.glb && hero.rig.glb.actions[e[0]]).map(([c, t]) => `<button class="gbtn emo" data-emo="${c}">${t}</button>`).join('')}</div>`;
     P.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => playEmote(b.dataset.emo));
+  } else if (LOBBY.tab === 'details' && PROFILE.char === 'kazan') {
+    P.innerHTML = `<h4>KAZAN · MAGMA KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
+      <tr><td>Health</td><td>heavy</td><td class="n">${KZ.hp} · speed −${Math.round((1 - KZ.speedMul) * 100)}%</td></tr>
+      <tr><td>Magma attack</td><td>tap ×3</td><td class="n">${BAL.basic.dmg.join(' · ')}</td></tr>
+      <tr><td>Close combo</td><td>3 hits</td><td class="n">${KZ.combo.join(' · ')}</td></tr>
+      <tr><td>${KZ.s1.name}</td><td>Skill 1</td><td class="n">${KZ.s1.dmg} dmg · ${KZ.s1.cd}s</td></tr>
+      <tr><td>${KZ.s2.name}</td><td>Skill 2</td><td class="n">${KZ.s2.dmg} + lava ${KZ.s2.lavaDps}/s · ${KZ.s2.cd}s</td></tr>
+      <tr><td>${KZ.su.name}</td><td>Super</td><td class="n">${KZ.su.dmg} + lava ${KZ.su.lavaDps}/s</td></tr>
+      <tr><td>Dash</td><td>no damage</td><td class="n">${KZ.dashCD}s cooldown</td></tr></table>
+      <div class="perk"><b>PERK — MAGMA HEAT:</b> ${KAZAN_PERK_TEXT}</div>`;
   } else if (LOBBY.tab === 'details') {
     const B2 = BAL.el[PROFILE.el];
     P.innerHTML = `<h4>${EL[PROFILE.el].name.toUpperCase()} KIT</h4><table class="kitT">
-      <tr><td>Combo</td><td>3 hits</td><td class="n">${BAL.combo.join(' · ')}</td></tr>
+      <tr><td>Element attack</td><td>tap ×3</td><td class="n">${BAL.basic.dmg.join(' · ')}</td></tr>
+      <tr><td>Close combo</td><td>3 hits</td><td class="n">${BAL.combo.join(' · ')}</td></tr>
       <tr><td>${B2.s1.name}</td><td>Skill 1</td><td class="n">${B2.s1.dmg} dmg · ${B2.s1.cd}s</td></tr>
       <tr><td>${B2.s2.name}</td><td>Skill 2</td><td class="n">${B2.s2.dmg ? B2.s2.dmg + ' dmg' : B2.s2.hp + ' HP wall'} · ${B2.s2.cd}s</td></tr>
       <tr><td>${B2.su.name}</td><td>Super</td><td class="n">${B2.su.dmg} dmg</td></tr>
@@ -2552,7 +2751,7 @@ function renderTab() {
 }
 function playEmote(clip) {
   const G = hero.rig.glb; if (!G || !G.actions[clip]) return;
-  const dur = (META[clip] && META[clip].dur) || G.actions[clip].getClip().duration;
+  const M = gmeta(G); const dur = (M[clip] && M[clip].dur) || G.actions[clip].getClip().duration;
   hero.emote = { clip, id: ++LOBBY.emoteId, end: game.time + dur - .15 }; Sfx.play('select');
   if (clip === 'power_up') later(.4, () => FX.burst(hero.pos.clone().setY(hero.pos.y + 1), PROFILE.el, 40, 6, 1.3));
 }
@@ -2612,7 +2811,7 @@ function frame(rdt) {
       hero.update(dt, enemy); enemy.update(dt, hero);
       const d = _v1.copy(enemy.pos).sub(hero.pos).setY(0), l = d.length();
       if (l < .8 && Math.abs(enemy.pos.y - hero.pos.y) < 1.5) { d.normalize().multiplyScalar((.8 - l) / 2); hero.pos.sub(d); enemy.pos.add(d); }
-      updateProjectiles(dt);
+      updateProjectiles(dt); updateLava(dt);
       for (let i = TIMERS.length - 1; i >= 0; i--) { TIMERS[i].t -= dt; if (TIMERS[i].t <= 0) { const f = TIMERS[i].fn; TIMERS.splice(i, 1); f(); } }
       updateFlow(game.state === 'ko' ? rdt : dt); updateCamera(rdt); hudUpdate(rdt); CAM.focusT -= dt;
     } else if (game.state === 'menu') lobbyFrame(rdt);
@@ -2635,8 +2834,7 @@ function frame(rdt) {
   const bar = () => { let v = 0; for (const k in PR) v += PR[k] * W[k]; $('#loadBar').style.width = Math.max(4, Math.round(v * 92)) + '%'; $('#loadPct').textContent = Math.round(v * 100) + '%  ·  ' + (v * 7.2).toFixed(1) + " / 7.2 MB"; window.__loadTick = Date.now(); };
   bar();
   $('#loadTxt').textContent = 'Loading the arena, Raven and effects…';
-  fetch('assets/raven_meta.json').then(r => r.json()).then(j => META = j).catch(() => { });
-  await Promise.all([
+    await Promise.all([
     loadTextures(p => { PR.t = p; bar(); }).then(() => { PR.t = 1; bar(); }),
     loadRavenGLB(p => { PR.r = p; bar(); }).then(() => { PR.r = 1; bar(); }),
     loadProps(p => { PR.p = p; bar(); }).then(() => { PR.p = 1; bar(); }),
@@ -2649,9 +2847,10 @@ function frame(rdt) {
   setupComposer(); onResize();
   $('#loadTxt').textContent = 'Preparing fighters…'; $('#loadBar').style.width = '96%'; await new Promise(r => setTimeout(r, 30));
   initLobby(); toLobby(); window.__booted = true;
-  loadFlipbooks(() => { }); // the other effects download in the background while you are in the lobby
+  loadFlipbooks(() => { }).then(() => setTimeout(() => loadCharGLB('kazan'), 400)); // effects, then Kazan, download in the background while you are in the lobby
+  if (PROFILE.char !== 'raven') { const want = PROFILE.char; PROFILE.char = 'raven'; selectChar(want); }
   setupInstall();
   $('#loading').classList.add('hidden');
-  window.__game = { game, get hero() { return hero; }, get enemy() { return enemy; }, startMatch, beginMatch, toLobby, renderLobby, LOBBY, PROFILE, AB, BAL, AI, CAM, KEYS, PRESSED, TOUCH, PROJ, OBS, SETTINGS, renderer, step(n, keys = []) { for (let i = 0; i < n; i++) { keys.forEach(k => PRESSED.add(k)); keys = []; frame(1 / 60); } }, cam(p, l) { DEBUG_CAM = p ? [new V3(...p), new V3(...l)] : null; } };
+  window.__game = { game, get hero() { return hero; }, get enemy() { return enemy; }, startMatch, beginMatch, ensureChars, LAVA, TELES, toLobby, renderLobby, LOBBY, PROFILE, AB, BAL, AI, CAM, KEYS, PRESSED, TOUCH, PROJ, OBS, SETTINGS, renderer, step(n, keys = []) { for (let i = 0; i < n; i++) { keys.forEach(k => PRESSED.add(k)); keys = []; frame(1 / 60); } }, cam(p, l) { DEBUG_CAM = p ? [new V3(...p), new V3(...l)] : null; } };
   loop();
 })();
