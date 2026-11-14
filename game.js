@@ -2929,7 +2929,7 @@ let INSTALL_EVT = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EVT = e; const b = $('#installBtn'); if (b) b.style.display = ''; });
 addEventListener('appinstalled', () => { INSTALL_EVT = null; const b = $('#installBtn'); if (b) b.style.display = 'none'; toast('Installed — open it from your home screen'); });
 function setupInstall() {
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => { });
   const b = $('#installBtn'); if (!b || STANDALONE) return;
   const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (iOS || INSTALL_EVT) b.style.display = '';
