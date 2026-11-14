@@ -1602,19 +1602,20 @@ function projFX(p) { // replaces the code-drawn projectile with filmed fire / wa
   else if (v === 'water' || v === 'ewater') main = fb('water_orb', { follow, size: r * 3.2, loop: true, speed: 1.3, opacity: .95 });
   else if (v === 'bolt') main = fb('lightning_orb', { follow, size: .95, loop: true, speed: 1.6, boost: 1.2 });
   else if (v === 'lance') main = fb('lightning_orb', { follow, size: 1.5, loop: true, speed: 1.8, boost: 1.3 });
-  else if (v === 'wind') main = fb('water_vortex', { follow, size: r * 3, loop: true, speed: 1.8, desat: 1, tint: 0xe8f4ff, opacity: .8 });
+  else if (v === 'wind') main = fb('water_vortex', { follow, size: r * 3.2, loop: true, speed: 2, desat: 1, tint: 0xffffff, boost: 1.35, opacity: .95 });
   else if (v === 'gale') main = fb('tornado', { follow, size: [r * 2.4, r * 3], loop: true, speed: 1.6, mode: 'up', opacity: .9 });
   else if (v === 'crescent') main = p.el === 'fire' ? fb('fire_wall', { follow, size: [r * 3.4, r * 2.2], loop: true, speed: 1.4, mode: 'up' }) : fb('water_vortex', { follow, size: [r * 3, r * 1.4], loop: true, speed: 2, desat: p.el === 'wind' ? 1 : 0, tint: p.el === 'wind' ? 0xe8f4ff : 0xffffff, opacity: .85 });
   else if (v === 'railrock') main = fb('fire_loop', { follow, size: 1.2, loop: true, speed: 1.5 });
+  else if (v === 'rock' && p.el === 'earth') { p.fbh = (p.fbh || []).concat([fb('dust_puff', { follow, size: r * 3.6, loop: true, speed: 1.6, opacity: .5 })]); }
   if (main) { p.fbh = (p.fbh || []).concat([main]); if (p.mesh && v !== 'lance' && v !== 'railrock' && v !== 'crescent') p.mesh.visible = false; if (p.mesh && v === 'crescent') p.mesh.visible = false; }
   if (v === 'ewater') p.fbh.push(fb('lightning_orb', { follow, size: .9, loop: true, speed: 2 }));
 }
 function impactFX(el, pos, heavy, big = 1) {
   const E = EFX[el] || EFX.fire, s = (heavy ? 1.6 : 1) * big;
-  if (el === 'fire') { fb('explosion', { pos: _v4.copy(pos).setY(pos.y + .4 * s), size: 2.2 * s }); if (heavy) fb('fire_burst', { pos, size: 2.2 * s, boost: 1.1 }); }
-  else if (el === 'water') { fb('water_splash', { pos, size: 2.4 * s, speed: 1.4 }); }
-  else if (el === 'wind') { fb('dust_puff', { pos: _v4.copy(pos).setY(pos.y - .3), size: 2.4 * s, opacity: .75, speed: 1.6 }); }
-  else if (el === 'earth') { fb('rock_burst', { pos: _v4.copy(pos).setY(pos.y - .2), size: 2.6 * s }); fb('dust_puff', { pos, size: 2.2 * s, opacity: .8, speed: 1.5 }); }
+  if (el === 'fire') { fb('explosion', { pos: _v4.copy(pos).setY(pos.y + .4 * s), size: 2.6 * s }); if (heavy) fb('fire_burst', { pos, size: 2.2 * s, boost: 1.1 }); }
+  else if (el === 'water') { fb('water_splash', { pos, size: 2.9 * s, speed: 1.4 }); }
+  else if (el === 'wind') { fb('dust_puff', { pos: _v4.copy(pos).setY(pos.y - .3), size: 2.6 * s, opacity: .7, speed: 1.7 }); fb('water_vortex', { pos, size: 1.9 * s, speed: 2.4, desat: 1, tint: 0xffffff, boost: 1.3, opacity: .8 }); }
+  else if (el === 'earth') { fb('rock_burst', { pos: _v4.copy(pos).setY(pos.y - .2), size: 3.1 * s }); fb('dust_puff', { pos, size: 2.5 * s, opacity: .85, speed: 1.5 }); }
   else if (el === 'lightning') { fb('bolt_branch', { pos, size: 2 * s, speed: 1.8, boost: 1.2 }); fb('lightning_orb', { pos, size: 1.3 * s, speed: 2.5 }); }
 }
 function muzzleFX(f, el) {
@@ -1658,13 +1659,82 @@ function buildBasics() {
   B('lightning', s1, { el: 'lightning', anim: 'punch', cd: C[0], hint: 'Spark', fn(f, t) { spawnBall(f, t, { el: 'lightning', pos: frontPos(f, .9, 1.35), speed: 46, radius: .32, dmg: D[0], kb: 2, stun: .12, vis: 'bolt', life: 1 }); Sfx.play('lightning'); } });
   B('lightning2', s2, { el: 'lightning', anim: 'push', cd: C[1], hint: 'Twin Bolts', fn(f, t) { for (const sp of [-.06, .06]) spawnBall(f, t, { el: 'lightning', pos: frontPos(f, .9, 1.3), speed: 48, radius: .3, dmg: D[1] / 2, kb: 1.5, spread: sp, vis: 'bolt', life: 1 }); Sfx.play('lightning'); } });
   B('lightning3', s3, { el: 'lightning', clip: 'magic2h', anim: 'lift', speed: 2.4, cd: C[2], hint: 'Lightning Lance', fn(f, t) { spawnBall(f, t, { el: 'lightning', pos: frontPos(f, .9, 1.6), speed: 56, radius: .5, dmg: D[2], kb: 7, stun: .3, knockdown: true, vis: 'lance', life: 1 }); Sfx.play('thunder'); shake(.25); } });
+  // Rakan — stone & gravity (heavier earth shots)
+  B('stone', s1, { el: 'earth', anim: 'lift', cd: C[0], hint: 'Stone Shot', fn(f, t) { const p = frontPos(f, 1.1, -.3); spawnBall(f, t, { el: 'earth', pos: p, speed: 23, radius: .6, dmg: D[0], kb: 5, rise: .12, riseTo: 1.4, vis: 'rock', life: 2 }); Sfx.play('earth'); FX.earth(p.clone().setY(f.pos.y + .1), 8, .5); } });
+  B('stone2', s2, { el: 'earth', anim: 'rapid', cd: C[1], hint: 'Shard Volley', fn(f, t) { const p = frontPos(f, .9, 1.3); for (const sp of [-.14, 0, .14]) spawnBall(f, t, { el: 'earth', pos: p.clone(), speed: 31, radius: .34, dmg: D[1] / 3, kb: 2, spread: sp, vis: 'shard', life: 1.4 }); Sfx.play('earth'); } });
+  B('stone3', s3, { el: 'earth', clip: 'magic2h', anim: 'hammer', speed: 2.2, cd: C[2], hint: 'Gravity Boulder', fn(f, t) { const p = frontPos(f, 1.2, -.3); spawnBall(f, t, { el: 'earth', pos: p, speed: 20, radius: .8, dmg: D[2], kb: 9, knockdown: true, rise: .14, riseTo: 1.5, vis: 'rock', life: 2.2 }); FX.earth(p.clone().setY(f.pos.y + .1), 12, .8); gravityRing(f, false); Sfx.play('earth'); shake(.2); } });
   // Kazan — magma (no lava pools: those only come from his skills)
   B('magma', s1, { el: 'fire', anim: 'punch', cd: C[0], hint: 'Magma Shot', fn(f, t) { spawnBall(f, t, { el: 'fire', pos: frontPos(f, .9, 1.35), speed: 25, radius: .42, dmg: D[0], kb: 3, vis: 'fire', life: 2, trail: 'fire_loop', trailSize: 1 }); Sfx.play('fire'); } });
   B('magma2', s2, { el: 'earth', anim: 'rapid', cd: C[1], hint: 'Lava Shards', fn(f, t) { pair(f, t, { el: 'fire', speed: 27, radius: .34, kb: 2.5, vis: 'railrock', life: 1.6, y: 1.25 }); Sfx.play('earth'); Sfx.play('fire'); } });
   B('magma3', s3, { el: 'fire', clip: 'magic_area', anim: 'hammer', speed: 2.2, cd: C[2], hint: 'Magma Boulder', fn(f, t) { const p = frontPos(f, 1.2, -.4); spawnBall(f, t, { el: 'fire', pos: p, speed: 19, radius: .75, dmg: D[2], kb: 8, knockdown: true, rise: .14, riseTo: 1.4, vis: 'rock', life: 2.2, trail: 'fire_loop', trailSize: 1.6 }); FX.earth(p.clone().setY(f.pos.y + .1), 12, .7); Sfx.play('earth'); Sfx.play('fire'); shake(.2); } });
 }
 const isBasic = (f, name) => !!name && (ELS.includes(name) || (f.kit && name === f.kit.basic));
-buildKits(); buildKazanKit(); buildBasics();
+// ---------------------------------------------------------------- RAKAN — Guardian of the Mountain (legendary; numbers from the user's sheet)
+BAL.chars.rakan = { hp: 1100, speedMul: 1, dashCD: 2.5, dashMul: .85, combo: [30, 40, 55], height: 2.12, baseDR: .08,
+  stab: { dr: .15, kbRes: .5, dur: 3, icd: 8 },
+  s1: { name: 'Rock Smash', dmg: 105, cd: 9, windup: .65, recover: .45, range: 4.4, half: .62, slow: .2, slowDur: 1.5 },
+  s2: { name: 'Gravity Counter', dur: .8, perfect: .3, pulse: 60, reflect: .7, reflectCap: 100, lateDR: .35, cd: 13 },
+  su: { name: 'Mountain Fall', dmg: 210, warn: 1.2, radius: 4.2, dist: 4.3, windupDR: .2, recover: .7 } };
+const RK = BAL.chars.rakan;
+const RAKAN_PERK_TEXT = `Landing the 3rd combo hit grants <b>Mountain Stability</b> for ${RK.stab.dur} s: damage taken −${Math.round(RK.stab.dr * 100)}% and knockback halved (once every ${RK.stab.icd} s). Base defense: −${Math.round(RK.baseDR * 100)}% damage taken.`;
+const RAKAN_KIT = { name: 'Stone', basic: 'stone', btn: [['stone', 'Stone Attack'], ['rk_s1', RK.s1.name], ['rk_s2', RK.s2.name]], superAb: 'rk_su', superR: [0, 6],
+  desc: `<b>${RK.s1.name}</b> · <b>${RK.s2.name}</b> · Super: <b>${RK.su.name}</b><br>Perk: ${RAKAN_PERK_TEXT}`,
+  moves: [['stone', .15, 3, 2.5, 16], ['rk_s1', .7, 3, 0, 4.2], ['rk_s2', 1, .8, 0, 3.5]], pref: 3.2, speed: BAL.moveSpeed, aggr: .85, blockP: .35, jumpP: .1, airJumps: 0, glide: false, armor: 1, heal: 0 };
+// highest damage reduction only — percentages never stack (user's rule)
+function charDR(tgt) {
+  let dr = 0;
+  if (tgt.charId === 'rakan') {
+    dr = RK.baseDR;
+    if (tgt.sts.stab > 0) dr = Math.max(dr, RK.stab.dr);
+    if (tgt.state === 'cast' && tgt.cast) { const n = tgt.cast.a.name; if (n === 'rk_s2') dr = Math.max(dr, RK.s2.lateDR); if (n === 'rk_su' && !tgt.cast.fired) dr = Math.max(dr, RK.su.windupDR); }
+  }
+  if (tgt.sts.fort > 0) dr = Math.max(dr, BAL.el.earth.perk.pct);
+  return dr;
+}
+function gravityRing(f, big) {
+  const c = f.pos.clone().setY(f.pos.y + 1.1);
+  fb('dust_puff', { pos: f.pos.clone().setY(f.pos.y + .2), size: big ? 4 : 2.6, opacity: .7, speed: 1.8 });
+  FX.shock(c, 'wind', big ? 2 : 1.3); FX.earth(f.pos.clone().setY(f.pos.y + .2), big ? 16 : 8, 1.2);
+  for (let i = 0; i < (big ? 14 : 7); i++) DEBRIS.spawn(f.pos.clone().setY(f.pos.y + rand(.2, 1.5)), _v1.randomDirection().multiplyScalar(rand(2, 5)).setY(rand(2, 6)), rand(.6, 1.4));
+}
+function rakanCounterTry(att, tgt, h) { // returns a result string when the stance answers the hit, else null
+  const S = RK.s2, c = tgt.cast, p = h.proj;
+  const perfect = c.t <= S.perfect && !c.used;
+  const hitPos = tgt.pos.clone().setY(tgt.pos.y + 1.2);
+  if (perfect && h.melee) {
+    c.used = true; gravityRing(tgt, false); Sfx.play('perfect'); popText(hitPos.clone().setY(hitPos.y + 1), 'COUNTERED!', '#ffe08a', 26); hitstop(.1); shake(.4);
+    applyHit(tgt, att, { dmg: S.pulse, kb: 10, launch: 3, el: 'earth', from: tgt.pos, heavy: true, push: true, counterPulse: true });
+    return 'counter';
+  }
+  if (perfect && p && p.kind === 'ball' && p.power < 3 && !p.reflected) {
+    c.used = true; p.owner = tgt; p.dir = aimDir(tgt, p.pos, att); p.speed *= 1.1; p.t = 0; p.castId = null; p.skill = false; p.reflected = true; p.dmg = Math.min(Math.round(p.dmg * S.reflect), S.reflectCap);
+    gravityRing(tgt, false); Sfx.play('perfect'); popText(hitPos, 'RETURNED! ↩', '#ffe08a', 24); hitstop(.08);
+    return 'reflect';
+  }
+  return null; // late (or not reflectable): the stance's 35% reduction applies through charDR
+}
+function buildRakanKit() {
+  def('rk_s1', { el: 'earth', clip: 'magic_area', anim: 'stomp', hit: RK.s1.windup, speed: 2, dur: RK.s1.windup + .35, cd: RK.s1.cd, label: RK.s1.name, noMove: true,
+    fn(f, t) {
+      const fw = fwdOf(f), P = f.pos.clone().addScaledVector(fw, 2.2);
+      fb('rock_burst', { pos: P.clone().setY(P.y + .8), size: 4.6 }); fb('dust_wave', { pos: P.clone().setY(P.y + .6), size: [5.5, 2.6], mode: 'up', speed: 1.5 });
+      FX.earth(P.clone().setY(P.y + .2), 18, 1.6); decal(P, 'crack', 3.4); Sfx.play('earth'); Sfx.play('heavy'); shake(.5);
+      for (let i = 0; i < 10; i++) DEBRIS.spawn(P.clone().setY(P.y + .3), _v1.set(fw.x, 0, fw.z).multiplyScalar(rand(2, 6)).add(_v2.randomDirection()).setY(rand(3, 8)), rand(.8, 2));
+      const ok = coneHit(f, t, RK.s1.range, RK.s1.half, RK.s1.dmg, { kb: 4, launch: 3, el: 'earth', heavy: true, slow: RK.s1.slowDur, slowPct: RK.s1.slow });
+      if (!ok && f.cast) f.cast.dur = f.cast.a.dur + RK.s1.recover; // a whiff leaves him open
+    } });
+  def('rk_s2', { el: 'earth', clip: 'block', anim: 'lift', hit: .02, speed: 1, dur: RK.s2.dur, cd: RK.s2.cd, label: RK.s2.name, noMove: true, counter: true, noMuzzle: true,
+    onStart(f) { f.cast.used = false; Sfx.play('earth'); FX.shock(f.pos.clone().setY(f.pos.y + 1), 'wind', 1); fb('rocks_float', { follow: () => f.state === 'cast' && f.cast && f.cast.a.name === 'rk_s2' ? f.pos.clone().setY(f.pos.y + 1) : null, size: 2.6, loop: true, life: RK.s2.dur, opacity: .9 }); },
+    fn() { } });
+  def('rk_su', { el: 'earth', clip: 'magic2h3', anim: 'stomp', hit: RK.su.warn, speed: 1.1, dur: RK.su.warn + RK.su.recover, cd: 1, super: true, power: 3, label: RK.su.name, noMove: true,
+    onStart(f, t) { const fw = fwdOf(f); const P = f.pos.clone().addScaledVector(fw, RK.su.dist); const r = Math.hypot(P.x, P.z); if (r > CFG.ARENA_R - 1) P.multiplyScalar((CFG.ARENA_R - 1) / r); P.y = groundAt(P.x, P.z, f.pos.y + .3); f.suP = P; telegraph(P, RK.su.radius, 0xc8a050, RK.su.warn); fb('rocks_float', { pos: P.clone().setY(P.y + 1.4), size: 5, loop: true, life: RK.su.warn, opacity: .85 }); },
+    fn(f, t) { const P = f.suP, s = RK.su;
+      fb('crater', { pos: P.clone().setY(P.y + .3), size: 7, speed: .9 }); fb('rock_burst', { pos: P.clone().setY(P.y + 1.2), size: 6.5 }); fb('dust_wave', { pos: P.clone().setY(P.y + .9), size: [9, 4], mode: 'up', speed: 1.2 }); fb('explosion', { pos: P.clone().setY(P.y + 2), size: 5, opacity: .85 });
+      FX.burst(P.clone().setY(P.y + .4), 'earth', 30, 9, 2); decal(P, 'crack', 7); Sfx.play('explode'); Sfx.play('earth'); shake(1); flashSky();
+      for (let i = 0; i < 16; i++) DEBRIS.spawn(P.clone().setY(P.y + .5), _v1.randomDirection().multiplyScalar(rand(3, 9)).setY(rand(4, 10)), rand(1, 2.4));
+      if (!t.ghost() && Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 3) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 13, launch: 5, knockdown: true, el: 'earth', from: P, heavy: true, push: true })); } });
+}
+buildKits(); buildKazanKit(); buildRakanKit(); buildBasics();
 // ---------------------------------------------------------------- HIT RESOLUTION
 function applyHit(att, tgt, h) {
   if (tgt.invuln > 0 || tgt.state === 'ko' || (game.state !== 'fight' && game.state !== 'ko')) return 'miss';
@@ -1687,10 +1757,13 @@ function applyHit(att, tgt, h) {
     if (tgt.hp <= 0) { tgt.hp = 0; tgt.knock(_v1, 6, 6, true); onKO(tgt); }
     return 'block';
   }
+  if (tgt.state === 'cast' && tgt.cast && tgt.cast.a.counter && !h.unblockable && !h.lava && !h.counterPulse) {
+    const cr = rakanCounterTry(att, tgt, h); if (cr) return cr;
+  }
   let dmg = h.dmg;
   if (h.melee && tgt.sts.static > 0) { dmg += BAL.el.lightning.perk.bonus; tgt.sts.static = 0; for (let i = 0; i < 5; i++) boltFX(hitPos, hitPos.clone().add(_v3.randomDirection().multiplyScalar(1.2)), 0xd0c4ff, .05, .2); Sfx.play('lightning'); popText(hitPos.clone().setY(hitPos.y + .6), 'STATIC +' + BAL.el.lightning.perk.bonus, '#d8ccff', 18); }
   if (tgt.sts.soak > 0) dmg *= 1 + BAL.el.water.perk.pct;
-  if (tgt.sts.fort > 0) dmg *= 1 - BAL.el.earth.perk.pct;
+  dmg *= 1 - charDR(tgt); // highest reduction only, never stacked
   dmg = Math.max(1, Math.round(dmg));
   const real = Math.min(dmg, Math.max(0, tgt.hp)); tgt.hp -= dmg; tgt.lastHit = game.time; if (tgt.isDummy) tgt.hp = Math.max(1, tgt.hp);
   if (att === hero) { game.stats.dealt += real; game.stats.comboDmg = (game.time - (game.stats.lastHitT || -9) < 1.4 ? game.stats.comboDmg : 0) + dmg; game.stats.lastHitT = game.time; } else game.stats.taken += real;
@@ -1709,6 +1782,7 @@ function applyHit(att, tgt, h) {
   if (tgt === hero) vibrate(h.heavy ? 60 : 25);
   let kb = h.kb || 0, launch = h.launch || 0, kd = !!h.knockdown;
   const forced = launch >= 3 || kd || h.pull || h.lift || h.push || Math.abs(kb) >= 6;
+  if (tgt.sts.stab > 0) { kb *= RK.stab.kbRes; launch *= RK.stab.kbRes; }
   if (tgt.sts.ccImm > 0 && forced) { kb = Math.sign(kb) * Math.min(Math.abs(kb), 1.5); launch = 0; kd = false; }
   else if (forced) tgt.sts.ccImm = 1 + (launch > 0 ? 2 * launch / CFG.GRAVITY : 0) + (kd ? 1.9 : 0);
   if (tgt.hp <= 0) { tgt.hp = 0; tgt.knock(_v1, Math.max(7, Math.abs(kb)), Math.max(7, launch), true); onKO(tgt); return 'hit'; }
@@ -1805,7 +1879,7 @@ function animateGLB(f, dt, lz, lx, hs) {
   let clip = G.cur, ret = true, drove = false;
   if (f.emote && st === 'idle') drove = playAttack(G, f.emote.clip, 0, 1, 'e' + f.emote.id);
   else if (st === 'cast' && f.cast && f.cast.a.clip) { const a = f.cast.a; drove = playAttack(G, a.clip, impactStart(G, a.clip, a.rel, a.speed || 1), a.speed || 1, 'c' + f.castId); }
-  else if (st === 'melee' && f.melee) { const md = MELEE[f.melee.i]; drove = playAttack(G, md.clip, impactStart(G, md.clip, md.hit, md.speed), md.speed, 'm' + f.castId); }
+  else if (st === 'melee' && f.melee) { const md = (MELEE_OV[f.charId] || {})[f.melee.i] || MELEE[f.melee.i]; drove = playAttack(G, md.clip, impactStart(G, md.clip, md.hit, md.speed), md.speed, 'm' + f.castId); }
   else if (st === 'hit') drove = playAttack(G, f.stun > .6 ? 'stunned' : 'hit', f.stun > .6 ? 0 : .05, f.stun > .6 ? 1.2 : 1.7, 'h' + f.hitId);
   else if (st === 'down' || st === 'ko') drove = playAttack(G, 'dying', 0, st === 'ko' ? 1.05 : 1.7, 'd' + f.downId);
   else if (st === 'getup') drove = playAttack(G, 'getup', .35, 2.6, 'g' + f.downId);
@@ -1858,6 +1932,7 @@ function buildDummy() {
   return g;
 }
 // ---------------------------------------------------------------- FIGHTER
+const MELEE_OV = { rakan: { 2: { clip: 'kick2', anim: 'punch', dur: 1.0, hit: .55, speed: 1.15, kb: 9, launch: 2, reach: 2.5, heavy: true, push: true } } };
 const MELEE = [
   { clip: 'jab2', anim: 'jab', dur: .36, hit: .13, speed: 1.5, kb: 1.6, reach: 1.75 },
   { clip: 'cross', anim: 'cross', dur: .4, hit: .15, speed: 1.6, kb: 2.2, reach: 1.8 },
@@ -1866,12 +1941,12 @@ const MELEE = [
 class Fighter {
   constructor(o) {
     Object.assign(this, { name: o.name, isMaster: o.isMaster, isPlayer: !!o.isPlayer, el: o.el || null, kit: o.kit || null });
-    this.blockStyle = o.isMaster ? 'all' : o.el;
+    this.blockStyle = o.blockStyle || (o.isMaster ? 'all' : o.el);
     this.rig = buildRig(o.isMaster ? 'hero' : 'raven', o.el ? EL[o.el].color : 0xffffff, o.el, o.variant || 'a');
     if (o.dummy) { this.isDummy = true; this.rig.root.traverse(m => { if (m.isMesh || m.isSprite || m.isPoints) m.visible = false; }); this.rig.root.add(this.dummyMesh = buildDummy()); this.wob = 0; this.wobV = 0; this.lastHitId = 0; }
     else if (!o.isMaster && CHAR_GLB[o.char || 'raven']) attachRavenGLB(this.rig, o.el, o.variant || 'a', o.char || 'raven');
     this.charId = o.dummy ? 'dummy' : o.isMaster ? 'master' : (o.char || 'raven');
-    const CS = BAL.chars[this.charId] || BAL.chars.raven; this.maxHp = CS.hp; this.dashMax = CS.dashCD; this.comboDmg = CS.combo;
+    const CS = BAL.chars[this.charId] || BAL.chars.raven; this.maxHp = CS.hp; this.dashMax = CS.dashCD; this.comboDmg = CS.combo; this.dashMul = CS.dashMul || 1;
     if (this.charId === 'kazan' && this.rig.glb) { const b = this.rig.glb.b; this.heatGlow = [b.LeftForeArm, b.LeftHand, b.RightHand].filter(Boolean).map((bn, i) => { this.rig.root.updateMatrixWorld(true); const ws = bn.getWorldScale(new V3()).x || 1; const g = glowSprite(0xff5a10, (i === 1 ? .6 : .45) / ws, 0); g.material.opacity = 0; bn.add(g); return g; }); }
     scene.add(this.rig.root);
     this.pos = new V3(); this.vel = new V3(); this.yaw = 0;
@@ -1882,7 +1957,7 @@ class Fighter {
   }
   blankIntent() { return { mx: 0, mz: 0, jump: false, jumpHeld: false, dash: false, melee: false, block: false, elems: [], ult: false, ability: null }; }
   reset(p) {
-    this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = this.maxHp || BAL.hp; this.dispHp = 100; this.heat = 0; this.heatT = 0; this.lavaAcc = 0; this.trailHp = 100; this.sts = { soak: 0, fort: 0, haste: 0, static: 0, ccImm: 0 }; this.icd = {}; this.mchain = 0; this.mchainT = -9; this.slowPct = .3; this.bufAb = null; this.castId = 0; this.hitId = 0; this.downId = 0; this.mana = CFG.MANA_MAX;
+    this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = this.maxHp || BAL.hp; this.dispHp = 100; this.heat = 0; this.heatT = 0; this.lavaAcc = 0; this.trailHp = 100; this.sts = { soak: 0, fort: 0, haste: 0, static: 0, stab: 0, ccImm: 0 }; this.icd = {}; this.mchain = 0; this.mchainT = -9; this.slowPct = .3; this.bufAb = null; this.castId = 0; this.hitId = 0; this.downId = 0; this.mana = CFG.MANA_MAX;
     this.state = 'idle'; this.st = 0; this.onGround = true; this.airJumps = this.maxAirJumps; this.airDash = 1; this.dashCD = 0;
     this.invuln = 0; this.stun = 0; this.combo = 0; this.lastComboHit = -9; this.burnT = 0; this.slowT = 0; this.blockFlash = 0; this.lastHit = -9;
     this.cast = null; this.melee = null; this.walkPh = 0; this.freezeT = 0; this.lastEl = 'fire'; this.dashFx = null; this.dashHit = false; this.landT = 0;
@@ -1977,7 +2052,7 @@ class Fighter {
         if (I.dash && this.dashCD <= 0 && (this.onGround || this.airDash > 0)) {
           if (!this.onGround) this.airDash--;
           const d = new V3(mvx, 0, mvz); if (d.lengthSq() < .05) d.copy(toOpp).normalize().multiplyScalar(-1); else d.normalize();
-          this.startDash(d, BAL.dashSpeed, BAL.dashTime); break;
+          this.startDash(d, BAL.dashSpeed * this.dashMul, BAL.dashTime); break;
         }
         if (I.melee) { this.startMelee(0); break; }
         if (I.ult) { this.useAbility(this.isMaster ? 'avatar' : this.kit.superAb, opp); break; }
@@ -1993,17 +2068,18 @@ class Fighter {
         break;
       }
       case 'melee': {
-        const m = this.melee, md = MELEE[m.i];
+        const m = this.melee, md = (MELEE_OV[this.charId] || {})[m.i] || MELEE[m.i];
         if (I.melee && this.st > .1) m.queued = true;
         if (!m.done && this.st >= md.hit) {
-          m.done = true; Sfx.play('swing');
+          m.done = true; Sfx.play('swing'); if (this.charId === 'rakan') { FX.earth(handPos(this, m.i === 0 ? 'L' : 'R'), 6, .25, null, .8); if (m.i === 2) Sfx.play('earth'); }
           const fwd = _v2.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)); this.vel.addScaledVector(fwd, 3.5);
           const tp = _v3.copy(opp.pos).sub(this.pos); const dy = Math.abs(tp.y); tp.y = 0; const d = tp.length();
           if (d < md.reach && dy < 1.4 && fwd.dot(tp.normalize()) > .3 && !opp.ghost()) {
             const el = this.isMaster ? this.lastEl : this.el;
             const chainOk = m.i > 0 && game.time - this.mchainT < BAL.comboReset;
-            const molten = !!m.molten; const r = applyHit(this, opp, { melee: true, dmg: (this.comboDmg || BAL.combo)[m.i] + (molten ? KZ.heat.bonus : 0), kb: md.kb + (molten ? 3 : 0), launch: md.launch, slow: molten ? KZ.heat.slowDur : 0, slowPct: KZ.heat.slow, el, from: this.pos, heavy: md.heavy, castId: this.castId, third: m.i === 2 && chainOk && this.mchain >= 2 });
+            const molten = !!m.molten; const r = applyHit(this, opp, { melee: true, dmg: (this.comboDmg || BAL.combo)[m.i] + (molten ? KZ.heat.bonus : 0), push: m.i === 2 && this.charId === 'rakan', kb: md.kb + (molten ? 3 : 0), launch: md.launch, slow: molten ? KZ.heat.slowDur : 0, slowPct: KZ.heat.slow, el, from: this.pos, heavy: md.heavy, castId: this.castId, third: m.i === 2 && chainOk && this.mchain >= 2 });
             if (molten && r === 'hit') { kazanFx(opp.pos.clone(), false); popText(opp.pos.clone().setY(opp.pos.y + 2.4), 'MOLTEN!', '#ff8a3a', 24); }
+            if (this.charId === 'rakan' && m.i === 2 && r === 'hit' && (this.icd.stab || 0) <= 0) { this.sts.stab = RK.stab.dur; this.icd.stab = RK.stab.icd; gravityRing(this, false); popText(this.pos.clone().setY(this.pos.y + 2.6), 'STABILITY', '#e8c890', 20); }
             if (r === 'hit') { this.mchain = chainOk ? this.mchain + 1 : 1; this.mchainT = game.time; } else if (r !== 'miss') this.mchain = 0;
             FX.el(el, handPos(this, m.i === 2 ? 'R' : m.i === 0 ? 'L' : 'R'), 10, .25, null, .9);
           }
@@ -2016,7 +2092,7 @@ class Fighter {
       }
       case 'cast': {
         const c = this.cast; c.t += dt;
-        const cm = c.a.basic ? BAL.basic.moveWhileCasting : .25; this.vel.x = damp(this.vel.x, mvx * this.speed * cm, 10, dt); this.vel.z = damp(this.vel.z, mvz * this.speed * cm, 10, dt);
+        const cm = c.a.noMove ? 0 : c.a.basic ? BAL.basic.moveWhileCasting : .25; this.vel.x = damp(this.vel.x, mvx * this.speed * cm, 10, dt); this.vel.z = damp(this.vel.z, mvz * this.speed * cm, 10, dt);
         if (!this.onGround && !c.a.ult) this.vel.y = Math.max(this.vel.y, -1.2);
         if (c.a.ult) { this.vel.y = (this.castBaseY + 2.6 - this.pos.y) * 4; this.onGround = false; this.vel.x *= .9; this.vel.z *= .9; ELS.forEach((e, i) => { const a = game.time * 4 + i * Math.PI / 2; FX.el(e, _v2.set(this.pos.x + Math.cos(a) * 1.4, this.pos.y + 1.1 + Math.sin(a * 1.3) * .3, this.pos.z + Math.sin(a) * 1.4), 2, .1, null, 1.1); }); this.invuln = .2; }
         if (!c.fired && c.t >= c.a.rel) { c.fired = true; AB_CUR_POWER = c.a.power; if (c.a.el && !c.a.noMuzzle) muzzleFX(this, c.a.el); c.a.fn(this, opp); AB_CUR_POWER = 1; }
@@ -2177,7 +2253,7 @@ class Fighter {
         w = 26; break;
       }
       case 'block': { P = over(clonePose(P0), { hipsY: .85, shL: [-1.35, -.3, -.45], elL: [-1.35, 0, 0], shR: [-1.35, .3, .45], elR: [-1.35, 0, 0], chest: [.2, 0, 0], hips: [0, .15, 0], head: [.15, 0, 0] }); if (this.blockFlash > 0) P.chest[0] -= .25; w = 26; break; }
-      case 'melee': { const md = MELEE[this.melee.i]; P = POSE_ANIMS[md.anim](P0, this.st, md.hit); w = 30; z = .62; break; }
+      case 'melee': { const md = (MELEE_OV[this.charId] || {})[this.melee.i] || MELEE[this.melee.i]; P = POSE_ANIMS[md.anim || 'punch'](P0, this.st, md.hit); w = 30; z = .62; break; }
       case 'cast': { const a = this.cast.a; P = POSE_ANIMS[a.anim](P0, this.cast.t, a.rel); w = 28; z = .62; if (!this.onGround && a.anim === 'lift') P.thL = [-.6, 0, .2]; break; }
       case 'hit': { P = over(clonePose(P0), { chest: [-.5, 0, rand(-.05, .05)], head: [-.5, 0, 0], shL: [-.2, 0, .8], shR: [-.2, 0, -.8], elL: [-.6, 0, 0], elR: [-.6, 0, 0], hipsY: .88, body: [-.18, 0, 0] }); if (!this.onGround) { P.thL = [-.8, 0, .2]; P.knL = [1, 0, 0]; P.thR = [-.4, 0, -.2]; P.knR = [1.2, 0, 0]; P.body = [-.5, 0, 0]; } w = 30; z = .5; break; }
       case 'down': case 'ko': {
@@ -2310,7 +2386,7 @@ class AI {
       if (r < D.blockP) { this.blockHold = .3 + Math.random() * .25; return; }
       if (r < D.blockP + D.dodgeP) { this.dodge(perp.clone()); return; }
     }
-    if ((tgt.state === 'melee' || (tgt.state === 'cast' && tgt.cast && !tgt.cast.fired && (dist < 6 || tgt.cast.a.name === 'lightning_s2'))) && (dist < 6 || tgt.cast) && free && Math.random() < D.blockP * .8) { this.blockHold = .45; return; }
+    if ((tgt.state === 'melee' || (tgt.state === 'cast' && tgt.cast && !tgt.cast.fired && (dist < 6 || tgt.cast.a.name === 'lightning_s2'))) && (dist < 6 || tgt.cast) && free && Math.random() < D.blockP * .8) { if (K.superAb === 'rk_su' && (f.cds.rk_s2 || 0) <= 0 && dist < 4 && Math.random() < .6) { I.ability = 'rk_s2'; return; } this.blockHold = .45; return; }
     if (this.blockHold > 0 || !['idle', 'air'].includes(f.state)) return;
     // 2) offense — openings make the AI more aggressive
     let blocked = losBlocked(f.pos, tgt.pos);
@@ -2361,12 +2437,12 @@ function readPlayerIntent() {
 const TBTN = {}, KSLOT = {};
 const ICON = n => `url(assets/ui/${n}.webp)`;
 function ctrlDefs() {
-  const el = hero.el, K = hero.kit, kz = hero.charId === 'kazan';
+  const el = hero.el, K = hero.kit, kz = hero.charId === 'kazan', rk = hero.charId === 'rakan';
   return [
     { code: 'KeyJ', key: 'J', icon: 'sk_fist', kind: 'melee', name: 'Combo' },
     { code: 'KeyU', key: 'U', icon: kz ? 'sk_fire' : 'ic_' + el, ab: K.btn[0][0], kind: 'basic', name: K.btn[0][1] + ' (tap ×3)' },
     { code: 'KeyI', key: 'I', icon: kz ? 'sk_fire' : 'sk_' + el, ab: K.btn[1][0], name: K.btn[1][1], tag: '1' },
-    { code: 'KeyO', key: 'O', icon: kz ? 'sk_earth' : 'sk_' + el, ab: K.btn[2][0], name: K.btn[2][1], tag: '2' },
+    { code: 'KeyO', key: 'O', icon: kz ? 'sk_earth' : rk ? 'sk_jump' : 'sk_' + el, ab: K.btn[2][0], name: K.btn[2][1], tag: '2' },
     { code: 'KeyE', key: 'E', icon: 'sk_super', kind: 'super', ab: K.superAb, name: 'Super' },
     { code: 'ShiftLeft', key: 'Shift', icon: 'sk_dash', kind: 'dash', name: 'Dash' },
     { code: 'KeyK', key: 'K', icon: null, kind: 'block', name: 'Block' },
@@ -2483,7 +2559,7 @@ const HUD = {
   combo: $('#combo'), ann: $('#announce'), arrow: $('#offArrow'), mark: $('#enemyMark'), train: $('#trainInfo'),
 };
 // status icons: [icon, good/bad]
-const ST_DEF = { heat: ['ic_fire', 'good', 'Magma Heat stacks (3 = Molten 3rd combo hit)'], soak: ['ic_water', 'bad', 'Soaked: +10% damage taken'], static: ['ic_lightning', 'bad', 'Static: next combo hit +30'], slow: [null, 'bad', 'Slowed', '❄'], fort: ['ic_earth', 'good', 'Fortified: −20% damage taken'], haste: ['ic_wind', 'good', 'Haste: +12% speed'], ccImm: [null, 'good', 'Immune to forced displacement', '⛨'] };
+const ST_DEF = { stab: ['ic_earth', 'good', 'Mountain Stability: −15% damage, knockback halved'], heat: ['ic_fire', 'good', 'Magma Heat stacks (3 = Molten 3rd combo hit)'], soak: ['ic_water', 'bad', 'Soaked: +10% damage taken'], static: ['ic_lightning', 'bad', 'Static: next combo hit +30'], slow: [null, 'bad', 'Slowed', '❄'], fort: ['ic_earth', 'good', 'Fortified: −20% damage taken'], haste: ['ic_wind', 'good', 'Haste: +12% speed'], ccImm: [null, 'good', 'Immune to forced displacement', '⛨'] };
 function hudStatuses(i, f) {
   const act = []; for (const k in ST_DEF) { if (k === 'heat') { if (f.heat > 0) act.push([k, f.heat]); continue; } const v = k === 'slow' ? f.slowT : f.sts[k]; if (v > 0) act.push([k, Math.ceil(v)]); }
   const key = act.map(a => a.join(':')).join(','); if (key === HUD.statKey[i]) return; HUD.statKey[i] = key;
@@ -2530,11 +2606,11 @@ function updateDmg(dt) {
 const ROSTER = [
   { id: 'raven', name: 'Raven', short: 'RAVEN', title: 'Shadow of the Five Elements', img: 'assets/p_raven.jpg', available: true, about: 'A shadow ninja who masters one element per fight. Pick the element before the match.' },
   { id: 'kazan', name: 'Kazan', short: 'KAZAN', title: 'Lord of Magma', img: 'assets/p_kazan.jpg', available: true, legendary: true, fixedEl: 'Magma', about: 'A heavy volcanic warrior: he controls the ground with lava and punishes up close. Slower and easier to dodge than Raven, but his skills leave burning ground behind.' },
+  { id: 'rakan', name: 'Rakan', short: 'RAKAN', title: 'Guardian of the Mountain', img: 'assets/p_rakan.jpg', available: true, legendary: true, fixedEl: 'Stone', about: 'A stone giant who wins up close: heavy fists, high defense, and a Gravity Counter that returns blows and projectiles when timed right. Big and slow to wind up — bait his swings and punish.' },
   { id: 'master', name: 'Elemental Master', short: 'MASTER', title: 'Wielder of all five', img: 'assets/p_hero.jpg', available: false },
   { id: 'soon_a', name: 'Unknown', available: false }, { id: 'soon_b', name: 'Unknown', available: false },
-  { id: 'soon_c', name: 'Unknown', available: false },
 ];
-const SKINS = { kazan: [{ id: 'default', name: 'Volcanic Garb', available: true, img: 'assets/full_kazan.jpg' }, { id: 'obsidian', name: 'Obsidian Garb', available: false }, { id: 'ash', name: 'Ash Garb', available: false }, { id: 'inferno', name: 'Inferno Garb', available: false }], raven: [{ id: 'default', name: 'Shadow Garb', available: true, img: 'assets/full_raven.jpg' }, { id: 'ember', name: 'Ember Garb', available: false }, { id: 'tide', name: 'Tide Garb', available: false }, { id: 'storm', name: 'Storm Garb', available: false }] };
+const SKINS = { rakan: [{ id: 'default', name: 'Mountain Plate', available: true, img: 'assets/full_rakan.jpg' }, { id: 'granite', name: 'Granite Plate', available: false }, { id: 'jade', name: 'Jade Plate', available: false }], kazan: [{ id: 'default', name: 'Volcanic Garb', available: true, img: 'assets/full_kazan.jpg' }, { id: 'obsidian', name: 'Obsidian Garb', available: false }, { id: 'ash', name: 'Ash Garb', available: false }, { id: 'inferno', name: 'Inferno Garb', available: false }], raven: [{ id: 'default', name: 'Shadow Garb', available: true, img: 'assets/full_raven.jpg' }, { id: 'ember', name: 'Ember Garb', available: false }, { id: 'tide', name: 'Tide Garb', available: false }, { id: 'storm', name: 'Storm Garb', available: false }] };
 const availableChars = () => ROSTER.filter(c => c.available);
 const PROFILE = { char: 'raven', el: 'fire', skin: 'default', opp: { char: 'random', el: 'random' }, diff: 'normal', mode: 'versus' };
 try { const p = JSON.parse(localStorage.getItem('ea_profile') || '{}'); Object.assign(PROFILE, p, { opp: Object.assign({}, PROFILE.opp, p.opp) }); } catch (e) { }
@@ -2549,10 +2625,11 @@ const game = { state: 'loading', mode: 'lobby', time: 0, rdt: 0, timer: CFG.ROUN
   sel: { p: { char: 'raven', el: 'fire' }, ai: { char: 'raven', el: 'fire' } }, stats: { dealt: 0, taken: 0, maxCombo: 0, comboDmg: 0 } };
 let hero, enemy, ai;
 const START_H = new V3(0, 0, 11), START_E = new V3(0, 0, -11);
-const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : f.charId === 'kazan' ? 'Kazan · Magma' : `Raven · ${EL[f.el].name}`;
+const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : f.charId === 'kazan' ? 'Kazan · Magma' : f.charId === 'rakan' ? 'Rakan · Stone' : `Raven · ${EL[f.el].name}`;
 function makeFighter(sel, isPlayer, variant) {
   if (sel.char === 'dummy') return new Fighter({ name: 'Training Dummy', dummy: true, el: 'earth', kit: RAVEN_KITS.earth });
   if (sel.char === 'master') { const K = MASTER_KIT; return new Fighter({ name: 'Elemental Master', isMaster: true, isPlayer, kit: K, speed: K.speed, airJumps: 1, glide: true, variant }); }
+  if (sel.char === 'rakan') { const K = RAKAN_KIT; return new Fighter({ name: 'Rakan', char: 'rakan', isMaster: false, isPlayer, el: 'earth', blockStyle: 'stone', kit: K, speed: K.speed, armor: 1, airJumps: 0, glide: false, heal: 0, variant }); }
   if (sel.char === 'kazan') { const K = KAZAN_KIT; return new Fighter({ name: 'Kazan', char: 'kazan', isMaster: false, isPlayer, el: 'fire', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
   const K = RAVEN_KITS[sel.el]; return new Fighter({ name: 'Raven', char: 'raven', isMaster: false, isPlayer, el: sel.el, kit: K, speed: K.speed, armor: K.armor, airJumps: K.airJumps, glide: K.glide, heal: K.heal, variant });
 }
@@ -2610,6 +2687,7 @@ function endMatch() {
   $('#endScreen').classList.remove('hidden'); showHUD(false);
 }
 function tipFor(f) {
+  if (f.charId === 'rakan') return 'Rakan punishes close attacks: when he crosses his arms, WAIT — hitting him in that window gets you countered. His heavy swings are slow, so step back and answer after they miss.';
   if (f.charId === 'kazan') return 'Kazan’s skills have long wind-ups: watch for the red line or circle and step out sideways, then punish him while he recovers. Never stand in his lava.';
   return { fire: 'Inferno Blast shows a red circle first — dash out of it. Fire heals a little on skill hits, so trade with combos.', water: 'Don’t eat the 3rd combo hit: it soaks you (+10% damage taken). Jump over the Wave.', wind: 'Air Blade is fast but light — block it. Walk out of the Cyclone sideways, its pull is weak.', earth: 'Rock Shot is slow: dash sideways. Walk around the Stone Wall instead of shooting into it.', lightning: 'Break line of sight with pillars to stop Chain Lightning, and keep moving during Thunderstorm.' }[f.el] || 'Keep moving and block the big shots.';
 }
@@ -2624,12 +2702,12 @@ function showHUD(on) {
 function goFullscreen() { try { if (IS_TOUCH && !STANDALONE && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => { })).catch(() => { }); } catch (e) { } }
 function resolveOpponent() {
   const o = PROFILE.opp; const ch = o.char === 'random' ? pick(availableChars()).id : o.char;
-  game.sel.ai = { char: ch, el: ch === 'kazan' ? 'fire' : o.el === 'random' ? pick(ELS) : o.el };
+  game.sel.ai = { char: ch, el: ch === 'kazan' ? 'fire' : ch === 'rakan' ? 'earth' : o.el === 'random' ? pick(ELS) : o.el };
 }
 async function beginMatch(mode, reroll = true) {
   Sfx.init(); Sfx.play('select'); goFullscreen();
   game.mode = mode; game.diff = PROFILE.diff;
-  game.sel.p = { char: PROFILE.char, el: PROFILE.char === 'kazan' ? 'fire' : PROFILE.el };
+  game.sel.p = { char: PROFILE.char, el: PROFILE.char === 'kazan' ? 'fire' : PROFILE.char === 'rakan' ? 'earth' : PROFILE.el };
   if (mode === 'training') game.sel.ai = { char: 'dummy' }; else if (reroll) resolveOpponent();
   if (!(await ensureChars([game.sel.p.char, game.sel.ai.char]))) return;
   $('#lobby').classList.remove('on'); $('#lobby').classList.add('hidden'); $('#endScreen').classList.add('hidden'); $('#pause').classList.add('hidden');
@@ -2691,12 +2769,12 @@ function initLobby() {
   if (IS_TOUCH) buildTouch();
 }
 function ensureChars(ids) { // downloads any fighter that is not on the phone yet, with a visible progress bar
-  const need = [...new Set(ids)].filter(id => (id === 'raven' || id === 'kazan') && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
+  const need = [...new Set(ids)].filter(id => (id === 'raven' || id === 'kazan' || id === 'rakan') && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
   const ov = $('#charLoad'); ov.classList.remove('hidden'); const pr = {}; const upd = () => { const v = need.reduce((a, id) => a + (pr[id] || 0), 0) / need.length; $('#charLoadBar').style.width = Math.round(v * 100) + '%'; $('#charLoadTxt').textContent = `Summoning ${need.map(n => n[0].toUpperCase() + n.slice(1)).join(' & ')}… ${Math.round(v * 100)}%`; };
   upd(); return Promise.all(need.map(id => loadCharGLB(id, p => { pr[id] = p; upd(); }))).then(r => { ov.classList.add('hidden'); if (r.includes(false)) { toast('Download failed — check your connection'); return false; } return true; });
 }
 function lobbyShowcase() {
-  const el = PROFILE.char === 'kazan' ? 'fire' : PROFILE.el;
+  const el = PROFILE.char === 'kazan' ? 'fire' : PROFILE.char === 'rakan' ? 'earth' : PROFILE.el;
   game.sel.p = { char: PROFILE.char, el }; game.sel.ai = { char: PROFILE.char, el };
   game.diff = PROFILE.diff; setupFighters(); enemy.rig.root.visible = false;
   const s = ARENA.lobbySpot; hero.reset(new V3(s.x, ARENA.lobbyTop, s.z)); hero.onGround = true;
@@ -2724,7 +2802,7 @@ function renderLobby() {
   document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('sel', b.dataset.nav === LOBBY.nav));
   const ch = ROSTER.find(c => c.id === PROFILE.char);
   $('#heroName').innerHTML = ch.name.toUpperCase() + (ch.legendary ? '<span class="legend">LEGENDARY</span>' : '');
-  const he = $('#heroEl'), fixed = ch.fixedEl; he.querySelector('i').style.backgroundImage = elIcon(fixed ? 'fire' : PROFILE.el); he.querySelector('span').textContent = fixed ? 'MAGMA · FIRE + EARTH' : EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
+  const he = $('#heroEl'), fixed = ch.fixedEl; he.querySelector('i').style.backgroundImage = elIcon(fixed ? (ch.id === 'rakan' ? 'earth' : 'fire') : PROFILE.el); he.querySelector('span').textContent = fixed ? (ch.id === 'rakan' ? 'STONE & GRAVITY' : 'MAGMA · FIRE + EARTH') : EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
   he.style.borderColor = fixed ? '#ff7a2a' : '#' + new THREE.Color(EL[PROFILE.el].color).getHexString();
   const B = $('#sideBody'), F = $('#sideFoot'), H = $('#sideHead');
   const elRow = (cur, attr, withRnd) => `<div class="els lbl">${ELS.map(e => `<button class="elb ${cur === e ? 'sel' : ''}" ${attr}="${e}" style="background-image:${elIcon(e)}" aria-label="${EL[e].name}"><small>${EL[e].name.toUpperCase()}</small></button>`).join('')}${withRnd ? `<button class="elb rnd ${cur === 'random' ? 'sel' : ''}" ${attr}="random" aria-label="Random">?<small>RANDOM</small></button>` : ''}</div>`;
@@ -2734,12 +2812,12 @@ function renderLobby() {
     H.textContent = 'BATTLE SETUP';
     const oppChars = [['random', 'RANDOM'], ...ROSTER.filter(c => c.id.indexOf('soon') !== 0).map(c => [c.id, (c.available ? '' : '🔒 ') + c.short, !c.available])];
     B.innerHTML = `<div class="sec"><label>FIGHTER</label><div class="fcard"><div class="pt" style="background-image:url(${ch.img})"></div><div><b>${ch.name.toUpperCase()}</b><span>${ch.title} · Skin: ${SKINS[ch.id].find(s => s.id === skinOf(ch.id)).name}</span></div></div></div>
-      ${ch.fixedEl ? `<div class="sec"><label>ELEMENT</label><div class="fcard magma"><div class="pt" style="background-image:${elIcon('fire')};border-radius:50%"></div><div><b>MAGMA</b><span>Fire + Earth — Kazan's own element, fixed.</span></div></div></div>` : `<div class="sec"><label>YOUR ELEMENT</label>${elRow(PROFILE.el, 'data-el')}</div>`}
+      ${ch.fixedEl ? `<div class="sec"><label>ELEMENT</label><div class="fcard magma"><div class="pt" style="background-image:${elIcon(ch.id === 'rakan' ? 'earth' : 'fire')};border-radius:50%"></div><div><b>${ch.id === 'rakan' ? 'STONE & GRAVITY' : 'MAGMA'}</b><span>${ch.id === 'rakan' ? 'Heavy stone and gravity — Rakan’s own element, fixed.' : 'Fire + Earth — Kazan’s own element, fixed.'}</span></div></div></div>` : `<div class="sec"><label>YOUR ELEMENT</label>${elRow(PROFILE.el, 'data-el')}</div>`}
       <div class="sec"><label>OPPONENT</label>${seg('data-oc', oppChars, PROFILE.opp.char)}</div>
-      ${PROFILE.opp.char === 'kazan' ? '' : `<div class="sec"><label>OPPONENT ELEMENT${PROFILE.opp.char === 'random' ? ' (IF RAVEN)' : ''}</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>`}
+      ${PROFILE.opp.char === 'kazan' || PROFILE.opp.char === 'rakan' ? '' : `<div class="sec"><label>OPPONENT ELEMENT${PROFILE.opp.char === 'random' ? ' (IF RAVEN)' : ''}</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>`}
       <div class="sec"><label>AI DIFFICULTY</label>${seg('data-d', [['easy', 'EASY'], ['normal', 'NORMAL'], ['hard', 'HARD']], PROFILE.diff)}</div>
       <div class="sec"><label>MODE</label>${seg('data-mode', [['versus', 'VERSUS AI'], ['training', 'TRAINING']], PROFILE.mode)}</div>`;
-    const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${PROFILE.opp.char === 'kazan' ? 'MAGMA' : PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
+    const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${PROFILE.opp.char === 'kazan' ? 'MAGMA' : PROFILE.opp.char === 'rakan' ? 'STONE' : PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
     playFoot('PLAY', oppTxt);
   } else if (LOBBY.nav === 'chars') {
     H.textContent = 'CHARACTERS';
@@ -2747,7 +2825,7 @@ function renderLobby() {
       const eq = c.id === PROFILE.char, frm = eq ? 'card_green' : c.available ? 'card_gold' : 'card_gray';
       const art = c.img ? `<div class="art" style="background-image:url(${c.img})"></div>` : `<div class="sil">${SIL_SVG}</div>`;
       const tag = eq ? '<span class="tag eq">EQUIPPED</span>' : c.available ? '<span class="tag">SELECT</span>' : '<span class="tag">🔒 COMING SOON</span>';
-      return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? 'fire' : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
+      return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? (c.id === 'rakan' ? 'earth' : 'fire') : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
     }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">More fighters are on the way. Locked fighters can’t be picked and never appear as a random opponent.</p>`;
     F.innerHTML = '';
   } else if (LOBBY.nav === 'inv') {
@@ -2787,6 +2865,15 @@ function renderTab() {
     const E = PROFILE.char === 'kazan' ? [['victory', 'VICTORY'], ['victory2', 'FIST PUMP'], ['hurricane', 'ROAR OF MAGMA'], ['power_up', 'EMBER BREATH'], ['kick', 'KICK']] : [['victory', 'VICTORY'], ['victory2', 'TRIUMPH'], ['power_up', 'POWER UP'], ['hurricane', 'WHIRLWIND']];
     P.innerHTML = `<h4>EMOTES</h4><div class="strip">${E.filter(e => hero.rig.glb && hero.rig.glb.actions[e[0]]).map(([c, t]) => `<button class="gbtn emo" data-emo="${c}">${t}</button>`).join('')}</div>`;
     P.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => playEmote(b.dataset.emo));
+  } else if (LOBBY.tab === 'details' && PROFILE.char === 'rakan') {
+    P.innerHTML = `<h4>RAKAN · STONE KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
+      <tr><td>Health</td><td>giant</td><td class="n">${RK.hp} · −${Math.round(RK.baseDR * 100)}% damage taken</td></tr>
+      <tr><td>Stone attack</td><td>tap ×3</td><td class="n">${BAL.basic.dmg.join(' · ')}</td></tr>
+      <tr><td>Mountain Fist</td><td>3 hits</td><td class="n">${RK.combo.join(' · ')} · 3rd pushes</td></tr>
+      <tr><td>${RK.s1.name}</td><td>Skill 1</td><td class="n">${RK.s1.dmg} dmg · ${RK.s1.cd}s</td></tr>
+      <tr><td>${RK.s2.name}</td><td>Skill 2</td><td class="n">counter ${RK.s2.pulse} / return ×${RK.s2.reflect} · ${RK.s2.cd}s</td></tr>
+      <tr><td>${RK.su.name}</td><td>Super</td><td class="n">${RK.su.dmg} dmg + heavy push</td></tr></table>
+      <div class="perk"><b>PERK — MOUNTAIN STABILITY:</b> ${RAKAN_PERK_TEXT}</div>`;
   } else if (LOBBY.tab === 'details' && PROFILE.char === 'kazan') {
     P.innerHTML = `<h4>KAZAN · MAGMA KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
       <tr><td>Health</td><td>heavy</td><td class="n">${KZ.hp} · speed −${Math.round((1 - KZ.speedMul) * 100)}%</td></tr>
@@ -2907,7 +2994,7 @@ function frame(rdt) {
   setupComposer(); onResize();
   $('#loadTxt').textContent = 'Preparing fighters…'; $('#loadBar').style.width = '96%'; await new Promise(r => setTimeout(r, 30));
   initLobby(); toLobby(); window.__booted = true;
-  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan'), 400)); // effects, then Kazan, download in the background while you are in the lobby
+  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan').then(() => loadCharGLB('rakan')), 400)); // effects, then Kazan, download in the background while you are in the lobby
   if (PROFILE.char !== 'raven') { const want = PROFILE.char; PROFILE.char = 'raven'; selectChar(want); }
   setupInstall();
   $('#loading').classList.add('hidden');
