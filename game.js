@@ -355,14 +355,14 @@ function buildArena() {
   const sky = T.sky; sky.mapping = THREE.EquirectangularReflectionMapping;
   scene.background = sky; scene.backgroundRotation.set(0, Math.PI * .62, 0);
   const pm = new THREE.PMREMGenerator(renderer); ENV_TEX = pm.fromEquirectangular(sky).texture; scene.environment = ENV_TEX; scene.environmentIntensity = .6; scene.environmentRotation.set(0, Math.PI * .62, 0);
-  scene.add(new THREE.HemisphereLight(0xcab6e2, 0x50382a, 1.1));
+  ARENA.hemi = new THREE.HemisphereLight(0xcab6e2, 0x50382a, 1.1); scene.add(ARENA.hemi);
   const sun = new THREE.DirectionalLight(0xffc48a, 2.8); sun.castShadow = true;
   sun.shadow.mapSize.set(IS_TOUCH ? 1024 : 2048, IS_TOUCH ? 1024 : 2048);
   const sc = sun.shadow.camera; sc.left = -20; sc.right = 20; sc.top = 20; sc.bottom = -20; sc.near = 1; sc.far = 100; sun.shadow.bias = -.0005; sun.shadow.normalBias = .04;
   scene.add(sun, sun.target); ARENA.sun = sun;
   const fill = new THREE.DirectionalLight(0xc6ccff, .8); fill.position.set(12, 10, 22); scene.add(fill);
   const gold = mat(0xd2a64c, .32, .95); MATS.gold = gold;
-  const stoneTop = new THREE.MeshStandardMaterial({ map: rep(T.floor, 12, 12), roughness: .88, color: 0xe2d6c6 });
+  const stoneTop = new THREE.MeshStandardMaterial({ map: rep(T.floor, 12, 12), roughness: .88, color: 0xe2d6c6 }); MATS.floor = stoneTop;
   const stoneSide = new THREE.MeshStandardMaterial({ map: rep(T.floor, 34, .5), roughness: .95, color: 0xc6bba9 });
   const stoneDark = new THREE.MeshStandardMaterial({ map: rep(T.floor, 2, 2), roughness: .95, color: 0x8f877c });
   const stoneBlock = new THREE.MeshStandardMaterial({ map: rep(T.floor, 1, 1), roughness: .9, color: 0xb9b1a6 }); MATS.stoneBlock = stoneBlock;
@@ -1516,7 +1516,7 @@ function lavaMesh(geo, rep, circ) {
   m.renderOrder = 3; scene.add(m); return m;
 }
 function addLava(owner, z) {
-  const mine = LAVA.filter(l => l.owner === owner); if (mine.length >= KZ.maxLava) removeLava(mine[0]);
+  const mine = LAVA.filter(l => l.owner === owner); if (!owner.isEnv && mine.length >= KZ.maxLava) removeLava(mine[0]);
   if (z.kind === 'line') {
     const len = z.a.distanceTo(z.b), geo = new THREE.PlaneGeometry(len, z.w); geo.rotateX(-Math.PI / 2);
     z.mesh = lavaMesh(geo, [len / 3, z.w / 3], false); z.mesh.position.set((z.a.x + z.b.x) / 2, Math.max(z.a.y, z.b.y) + .04, (z.a.z + z.b.z) / 2); z.mesh.rotation.y = -Math.atan2(z.b.z - z.a.z, z.b.x - z.a.x);
@@ -1763,6 +1763,7 @@ function gravityRing(f, big) {
   for (let i = 0; i < (big ? 14 : 7); i++) DEBRIS.spawn(f.pos.clone().setY(f.pos.y + rand(.2, 1.5)), _v1.randomDirection().multiplyScalar(rand(2, 5)).setY(rand(2, 6)), rand(.6, 1.4));
 }
 function rakanCounterTry(att, tgt, h) { // returns a result string when the stance answers the hit, else null
+  if (att.isEnv) return null;
   const S = RK.s2, c = tgt.cast, p = h.proj;
   const perfect = c.t <= S.perfect && !c.used;
   const hitPos = tgt.pos.clone().setY(tgt.pos.y + 1.2);
@@ -1991,6 +1992,8 @@ function buildMasterKit() {
 buildKits(); buildKazanKit(); buildRakanKit(); buildBasics(); buildSiraKit(); buildRaynKit(); buildMasterKit(); buildMasterBasics(); buildBladeBasics();
 // ---------------------------------------------------------------- HIT RESOLUTION
 function applyHit(att, tgt, h) {
+  if (att && att.boss && h && h.dmg) h = Object.assign({}, h, { dmg: h.dmg * BOSS.dmg });
+  if (tgt && tgt.boss && h) h = Object.assign({}, h, { kb: (h.kb || 0) * .4, launch: (h.launch || 0) * .35, stun: (h.stun || 0) * .5, knockdown: h.knockdown && Math.random() < .35 });
   if (att && att.isMaster && h && h.dmg && !h._mm) { h = Object.assign({}, h, { dmg: h.dmg * (MM.dmgMul || 1), _mm: 1 }); }
   if (tgt.invuln > 0 || tgt.state === 'ko' || (game.state !== 'fight' && game.state !== 'ko')) return 'miss';
   const from = h.from || att.pos;
@@ -2369,7 +2372,7 @@ class Fighter {
         if (canControl && I.block && this.onGround) { if (this.state !== 'block') { this.setState('block'); this.blockStart = game.time; this.rig.shield.visible = !['blade', 'all'].includes(this.blockStyle); this.onBlockStart(opp); } }
         else if (this.state === 'block') { this.setState(this.onGround ? 'idle' : 'air'); this.rig.shield.visible = false; }
         if (!canControl) break;
-        if (this.state !== 'block') { const sp = this.speed * slow * haste * (this.onGround ? 1 : .85), inp = mvx * mvx + mvz * mvz > .01, k = this.onGround ? (inp ? BAL.accel : BAL.decel) : 4; this.vel.x = damp(this.vel.x, mvx * sp, k, dt); this.vel.z = damp(this.vel.z, mvz * sp, k, dt); if (!inp && this.onGround && Math.hypot(this.vel.x, this.vel.z) < .25) { this.vel.x = 0; this.vel.z = 0; } }
+        if (this.state !== 'block') { const sp = this.speed * slow * haste * (this.onGround ? 1 : .85), inp = mvx * mvx + mvz * mvz > .01, k = this.onGround ? (inp ? BAL.accel : BAL.decel) * (MAPF.grip || 1) : 4; this.vel.x = damp(this.vel.x, mvx * sp, k, dt); this.vel.z = damp(this.vel.z, mvz * sp, k, dt); if (!inp && this.onGround && Math.hypot(this.vel.x, this.vel.z) < .25) { this.vel.x = 0; this.vel.z = 0; } }
         else { this.vel.x = damp(this.vel.x, 0, 12, dt); this.vel.z = damp(this.vel.z, 0, 12, dt); }
         if (I.jump && this.state !== 'block') {
           if (this.onGround) { this.vel.y = 10.8; this.onGround = false; this.setState('air'); Sfx.play('jump'); FX.earth(this.pos.clone().setY(this.pos.y + .1), 4, .3, null, .6); }
@@ -2992,7 +2995,7 @@ if (!ROSTER.find(c => c.id === PROFILE.char && c.available)) PROFILE.char = avai
 const skinOf = id => (PROFILE.skins = PROFILE.skins || {})[id] || 'default';
 if (PROFILE.opp.char !== 'random' && !ROSTER.find(c => c.id === PROFILE.opp.char && c.available)) PROFILE.opp.char = 'random';
 if (!PROFILE.ally || (PROFILE.ally.char !== 'random' && !ROSTER.find(c => c.id === PROFILE.ally.char && c.available))) PROFILE.ally = { char: 'random' };
-if (!['versus', 'duo', 'rumble', 'training'].includes(PROFILE.mode)) PROFILE.mode = 'versus';
+if (!['versus', 'duo', 'rumble', 'tower', 'training'].includes(PROFILE.mode)) PROFILE.mode = 'versus';
 if (!ELS.includes(PROFILE.el)) PROFILE.el = 'fire';
 function saveProfile() { try { localStorage.setItem('ea_profile', JSON.stringify(PROFILE)); } catch (e) { } }
 
@@ -3055,10 +3058,127 @@ function setupFighters(slots) {
   syncRightBar(enemy, true);
   buildControls(); buildObars();
 }
+// ===================== MAPS & HAZARDS =====================
+const MAPS = {
+  temple: { name: 'Sunset Temple', desc: 'The classic arena. No hazards.', icon: '🏛️' },
+  volcano: { name: 'Volcano Crater', desc: 'Lava pools burn; eruptions blast marked circles every few seconds.', icon: '🌋', fog: 0x5a1e10, fogN: 30, fogF: 170, bg: .5, hemi: [0xff9a70, 0x401008, 1.0], sun: [0xff6a30, 2.3], floor: 0xa27a66, every: 4.2 },
+  frozen: { name: 'Frozen Peak', desc: 'Slippery ice — you slide when you stop. Ice spikes burst from marked circles.', icon: '❄️', fog: 0xcfe2f2, fogN: 40, fogF: 210, bg: .95, hemi: [0xe4f2ff, 0x6080a0, 1.3], sun: [0xe8f4ff, 2.1], floor: 0xf2f9ff, grip: .32, every: 5, snow: 0xffffff },
+  storm: { name: 'Storm Plateau', desc: 'Lightning strikes marked circles — and strikes more often as the round goes on.', icon: '⛈️', fog: 0x2a2f3a, fogN: 22, fogF: 140, bg: .22, hemi: [0x8090b0, 0x202028, .85], sun: [0x9fb0ff, 1.0], floor: 0x9a9aa8, every: 3, snow: 0x9fb8ff, rain: true, dark: true },
+};
+const MAPF = { id: 'temple', grip: 1 };
+let MAP_DEF = null, HAZ_T = 0, WEATHER = null;
+const HAZ = { isEnv: true, team: -1, charId: 'world', name: 'The Arena', pos: new V3(0, 30, 0), spirit: 0, combo: 0, lastComboHit: -9, hp: 1, maxHp: 1, ghost: () => true };
+function applyMap(id) {
+  if (!MAP_DEF) MAP_DEF = { fog: scene.fog.color.getHex(), fogN: scene.fog.near, fogF: scene.fog.far, bg: scene.backgroundIntensity, hemi: ARENA.hemi ? [ARENA.hemi.color.getHex(), ARENA.hemi.groundColor.getHex(), ARENA.hemi.intensity] : null, sun: [ARENA.sun.color.getHex(), ARENA.sun.intensity], floor: MATS.floor ? MATS.floor.color.getHex() : 0xffffff, env: scene.environmentIntensity };
+  const M = MAPS[id] || MAPS.temple, D = MAP_DEF; MAPF.id = MAPS[id] ? id : 'temple'; MAPF.grip = M.grip || 1;
+  scene.fog.color.setHex(M.fog ?? D.fog); scene.fog.near = M.fogN ?? D.fogN; scene.fog.far = M.fogF ?? D.fogF;
+  if (!D.bgTex) D.bgTex = scene.background;
+  if (M.dark) { if (!D.stormTex) { const c = document.createElement('canvas'); c.width = 16; c.height = 256; const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#0b0e16'); gr.addColorStop(.42, '#252c3c'); gr.addColorStop(.5, '#3a4254'); gr.addColorStop(.56, '#2a2e36'); gr.addColorStop(1, '#14161b'); x.fillStyle = gr; x.fillRect(0, 0, 16, 256); D.stormTex = new THREE.CanvasTexture(c); D.stormTex.colorSpace = THREE.SRGBColorSpace; D.stormTex.mapping = THREE.EquirectangularReflectionMapping; }
+    scene.background = D.stormTex; } else scene.background = D.bgTex;
+  scene.backgroundIntensity = M.dark ? 1 : (M.bg ?? D.bg); scene.environmentIntensity = D.env * (M.bg ? Math.max(.45, M.bg) : 1);
+  const hm = M.hemi || D.hemi; if (ARENA.hemi && hm) { ARENA.hemi.color.setHex(hm[0]); ARENA.hemi.groundColor.setHex(hm[1]); ARENA.hemi.intensity = hm[2]; }
+  const sn = M.sun || D.sun; ARENA.sun.color.setHex(sn[0]); ARENA.sun.intensity = sn[1];
+  if (MATS.floor) MATS.floor.color.setHex(M.floor ?? D.floor);
+  if (WEATHER) { scene.remove(WEATHER.pts); WEATHER.pts.geometry.dispose(); WEATHER = null; }
+  if (M.snow) { const n = IS_TOUCH ? 500 : 900, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { pos[i * 3] = rand(-30, 30); pos[i * 3 + 1] = rand(0, 22); pos[i * 3 + 2] = rand(-30, 30); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: M.snow, size: M.rain ? .07 : .12, transparent: true, opacity: M.rain ? .55 : .85, depthWrite: false }));
+    pts.frustumCulled = false; scene.add(pts); WEATHER = { pts, rain: !!M.rain }; }
+  HAZ_T = 2.5;
+}
+function updateWeather(dt) {
+  if (!WEATHER) return; const a = WEATHER.pts.geometry.attributes.position, A = a.array, fall = WEATHER.rain ? 26 : 2.2;
+  for (let i = 0; i < A.length; i += 3) { A[i + 1] -= fall * dt; if (!WEATHER.rain) A[i] += Math.sin(game.time + i) * dt * .4; else A[i] += dt * 3; if (A[i + 1] < 0) { A[i + 1] = 22; A[i] = camera.position.x + rand(-30, 30); A[i + 2] = camera.position.z + rand(-30, 30); } }
+  a.needsUpdate = true;
+}
+function mapRoundStart() { // permanent features re-created every round (clearField wipes them)
+  if (MAPF.id === 'volcano') { const K = WORLD_K; for (const [x, z, r] of [[-9, -2, 2.2], [9.5, 3, 2.4], [1, 12.5, 1.9], [-2, -13, 2]]) addLava(HAZ, { kind: 'circle', c: new V3(x * K, groundAt(x * K, z * K) + .03, z * K), r, dps: 16, dur: 1e6 }); }
+  HAZ_T = 3;
+}
+function hazardStrike() {
+  const live = FIGHTERS.filter(f => f.hp > 0); if (!live.length) return; const T = pick(live);
+  const P = T.pos.clone().add(new V3(rand(-1.6, 1.6), 0, rand(-1.6, 1.6))); if (Math.hypot(P.x, P.z) > CFG.ARENA_R - 1) P.multiplyScalar((CFG.ARENA_R - 1) / Math.hypot(P.x, P.z));
+  P.y = groundAt(P.x, P.z, T.pos.y + .3);
+  const id = MAPF.id, R = id === 'storm' ? 1.8 : 2.3, warn = id === 'storm' ? .85 : 1.1;
+  telegraph(P, R, id === 'volcano' ? 0xff4010 : id === 'frozen' ? 0x9adcff : 0xb59cff, warn);
+  later(warn, () => {
+    if (game.state !== 'fight') return;
+    if (id === 'volcano') { fb('explosion', { pos: P.clone().setY(P.y + 1.2), size: 4.2, boost: 1.2 }); fb('fire_burst', { pos: P.clone().setY(P.y + .8), size: 3.2, mode: 'up' }); decal(P, 'scorch', 2.6); Sfx.play('fire'); shake(.45); addLava(HAZ, { kind: 'circle', c: P.clone().setY(P.y + .03), r: 1.6, dps: 14, dur: 3 }); }
+    else if (id === 'frozen') { for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; fb('ice_spike', { pos: P.clone().add(new V3(Math.cos(a) * .9, .9, Math.sin(a) * .9)), size: [1.4, 2], mode: 'up', speed: 1.4 }); } fb('ice_burst', { pos: P.clone().setY(P.y + .7), size: 3, boost: 1.1 }); Sfx.play('water'); shake(.3); }
+    else { fb('bolt', { pos: P.clone().setY(P.y + 5), size: [2.2, 11], mode: 'up', speed: 2.2, boost: 1.4 }); fb('lightning_orb', { pos: P.clone().setY(P.y + .6), size: 2.6 }); Sfx.play('lightning'); shake(.4); if (ARENA.hemi) { const i0 = ARENA.hemi.intensity; ARENA.hemi.intensity = 3; later(.12, () => { if (ARENA.hemi) ARENA.hemi.intensity = i0; }); } }
+    for (const f of FIGHTERS) { if (f.hp <= 0 || f.ghost()) continue; if (Math.hypot(f.pos.x - P.x, f.pos.z - P.z) < R + .3 && f.pos.y - P.y < 2.5) {
+      const hit = id === 'volcano' ? { dmg: 70, el: 'fire', kb: 6, launch: 7, burn: 2 } : id === 'frozen' ? { dmg: 55, el: 'ice', kb: 3, launch: 5, slow: 1.6, slowPct: .35 } : { dmg: 60, el: 'lightning', kb: 3, stun: .45 };
+      applyHit(HAZ, f, Object.assign({ from: P.clone().setY(P.y - .5), unblockable: true, heavy: true }, hit)); } }
+  });
+}
+function updateHazards(dt) {
+  if (game.mode === 'training' || game.state !== 'fight' || !MAPS[MAPF.id].every) return;
+  HAZ_T -= dt; if (HAZ_T > 0) return;
+  const M = MAPS[MAPF.id], ramp = MAPF.id === 'storm' ? Math.max(.55, game.timer / CFG.ROUND_TIME) : 1;
+  HAZ_T = M.every * ramp * rand(.8, 1.2) / Math.max(1, (FIGHTERS.length - 1) * .75); hazardStrike();
+}
+
+// ===================== PROGRESSION =====================
+const UNLOCK = { raven: null, sira: null, kazan: null, rayn: { lvl: 3, coins: 600 }, rakan: { lvl: 5, coins: 900 }, master: { lvl: 8, coins: 1500 } };
+const PROG = PROFILE.prog = Object.assign({ xp: 0, lvl: 1, coins: 0, owned: ['raven', 'sira', 'kazan'], towerBest: 0, wins: 0, played: 0 }, PROFILE.prog || {});
+const xpNeed = L => 150 + 100 * (L - 1);
+const owns = id => !UNLOCK[id] || PROG.owned.includes(id) || PROG.lvl >= UNLOCK[id].lvl;
+function grantRewards(xp, coins) {
+  const ups = [], unl = []; PROG.xp += xp; PROG.coins += coins;
+  while (PROG.xp >= xpNeed(PROG.lvl)) { PROG.xp -= xpNeed(PROG.lvl); PROG.lvl++; ups.push(PROG.lvl); for (const id in UNLOCK) if (UNLOCK[id] && UNLOCK[id].lvl === PROG.lvl && !PROG.owned.includes(id)) { PROG.owned.push(id); unl.push(id); } }
+  saveProfile(); return { ups, unl };
+}
+function progStrip() {
+  const need = xpNeed(PROG.lvl), pct = Math.round(PROG.xp / need * 100);
+  return `<div class="progS"><div class="lvB">LV ${PROG.lvl}</div><div class="xpB"><i style="width:${pct}%"></i><span>${PROG.xp} / ${need} XP</span></div><div class="coinB">🪙 ${PROG.coins}</div></div>`;
+}
+function rewardHTML(xp, coins, r, extra) {
+  const nm = id => (ROSTER.find(c => c.id === id) || { name: id }).name;
+  return `<div class="rew"><span>+${xp} XP</span><span>+${coins} 🪙</span>${extra ? `<span>${extra}</span>` : ''}</div>` +
+    (r.ups.length ? `<div class="lvup">LEVEL UP! → LV ${PROG.lvl}</div>` : '') +
+    r.unl.map(id => `<div class="unl">🔓 NEW FIGHTER UNLOCKED: <b>${nm(id).toUpperCase()}</b></div>`).join('') + progStrip();
+}
+function matchRewards(won) {
+  if (game.mode === 'training') return '';
+  const dm = { easy: .7, normal: 1, hard: 1.45 }[game.diff] || 1, mm = game.mode === 'duo' || game.mode === 'rumble' ? 1.15 : 1;
+  const xp = Math.round(((won ? 100 : 35) + game.wins[0] * 20 + Math.min(80, game.stats.dealt / 25)) * dm * mm), coins = Math.round(xp * .8);
+  PROG.played++; if (won) PROG.wins++;
+  return rewardHTML(xp, coins, grantRewards(xp, coins));
+}
+function buyChar(id) {
+  const U = UNLOCK[id]; if (!U || owns(id)) return true;
+  if (PROG.coins < U.coins) { toast(`Reach level ${U.lvl} or collect ${U.coins} 🪙 to unlock`); return false; }
+  PROG.coins -= U.coins; PROG.owned.push(id); saveProfile(); Sfx.play('chain'); toast('🔓 ' + ROSTER.find(c => c.id === id).name + ' unlocked!'); return true;
+}
+
+// ===================== TOWER =====================
+const BOSS = { hp: 2.3, dmg: 1.3, scale: 1.38 };
+const TOWER_FLOORS = 8;
+function towerNew() {
+  const pool = availableChars().map(c => c.id), FL = [];
+  for (let i = 0; i < TOWER_FLOORS - 1; i++) FL.push(pool[(i + Math.floor(Math.random() * pool.length)) % pool.length]);
+  const maps = ['temple', 'volcano', 'frozen', 'storm', 'temple', 'frozen', 'storm'];
+  game.tower = { floor: 1, opp: FL, boss: pick(['rakan', 'kazan', 'master']), maps, carry: 1 };
+}
+function towerFloorSetup() {
+  const T = game.tower, f = T.floor, boss = f === TOWER_FLOORS;
+  const ch = boss ? T.boss : T.opp[f - 1];
+  game.diff = boss ? 'hard' : f <= 2 ? 'easy' : f <= 5 ? 'normal' : 'hard';
+  game.sel.ai = { char: ch, el: { kazan: 'fire', rakan: 'earth', sira: 'water', rayn: 'fire', master: 'fire' }[ch] || pick(ELS), boss };
+  game.mapId = boss ? 'volcano' : T.maps[(f - 1) % T.maps.length];
+}
+function towerRewards(won) {
+  const T = game.tower, f = T.floor; let xp, coins, extra = '';
+  if (won) { xp = 50 + 20 * f; coins = 40 * f; if (f === TOWER_FLOORS) { coins += 500; xp += 200; extra = 'TOWER CONQUERED +500 🪙'; } }
+  else { xp = 20 + 10 * f; coins = 15 * f; }
+  const best = won ? f : f - 1; if (best > PROG.towerBest) { PROG.towerBest = best; extra = extra || `NEW BEST: FLOOR ${best}`; }
+  return rewardHTML(xp, coins, grantRewards(xp, coins), extra);
+}
+
 function clearField() { for (const p of PROJ) killProj(p, false); PROJ.length = 0; for (const w of WALLS) scene.remove(w.mesh); WALLS.length = 0; TIMERS.length = 0; TELES.length = 0; clearLava(); }
 function trainingSpots() { const s = ARENA.dummySpot; const c = new V3(-s.x, 0, -s.z).normalize(); return [new V3(s.x, .38, s.z).addScaledVector(c, 7.5).setY(0), new V3(s.x, .38, s.z)]; }
 function startRound() {
-  clearField();
+  clearField(); mapRoundStart();
   const sp = FIGHTERS.map(f => f.spirit), K = WORLD_K;
   if (game.mode === 'training') { const [h, d] = trainingSpots(); hero.reset(h); enemy.reset(d); enemy.home = d.clone(); hero.yaw = Math.atan2(d.x - h.x, d.z - h.z); enemy.yaw = hero.yaw + Math.PI; CAM.dir.set(d.x - h.x, 0, d.z - h.z).normalize(); }
   else if (game.mode === 'duo') {
@@ -3111,13 +3231,15 @@ function updateFlow(dt) {
     if (!tr && game.phaseT > (game.round === 1 ? 1.8 : 1.2) && !game.gongHit) { game.gongHit = true; Sfx.play('gong'); if (ARENA.gong) ARENA.gong.vel = 1.2; }
     if (game.phaseT > (tr ? .8 : game.round === 1 ? 2.4 : 1.8)) { game.state = 'fight'; if (!tr) announce('FIGHT!'); }
   } else if (game.state === 'fight') {
+    updateHazards(dt);
     if (game.mode === 'training') { hero.spirit = Math.min(100, hero.spirit + 9 * dt); if (hero.hp < hero.maxHp && game.time - hero.lastHit > 2) hero.hp = hero.maxHp; }
     else { game.timer -= dt; if (game.timer <= 0) { game.timer = 0; timeUp(); } }
   }
   else if (game.state === 'ko') {
     if (game.phaseT > .55) game.timeScale = damp(game.timeScale, 1, 3, dt / Math.max(.05, game.timeScale));
     if (game.phaseT > 1.6) { const wt = game.winTeam !== undefined ? game.winTeam : (game.koVictim === enemy ? hero.team : enemy.team); for (const w of FIGHTERS) if (w.team === wt && w.hp > 0 && w.state !== 'win' && w.onGround) { w.setState('win'); w.cast = null; } }
-    if (game.phaseT > 3.6) { if (game.wins[0] >= CFG.ROUNDS_TO_WIN || game.wins[1] >= CFG.ROUNDS_TO_WIN) endMatch(); else { game.round++; startRound(); } }
+    const RTW = game.mode === 'tower' ? 1 : CFG.ROUNDS_TO_WIN;
+    if (game.phaseT > 3.6) { if (game.wins[0] >= RTW || game.wins[1] >= RTW) endMatch(); else { game.round++; startRound(); } }
   }
 }
 function endMatch() {
@@ -3127,6 +3249,16 @@ function endMatch() {
   const allies = FIGHTERS.filter(f => f.team === hero.team && f !== hero).map(fighterLabel).join(' & ');
   $('#endSub').innerHTML = `${fighterLabel(hero)}${allies ? ' & ' + allies : ''} <span style="opacity:.6">vs</span> ${foes} · ${game.diff.toUpperCase()}<br>${won ? 'Well fought.' : `<b>Tip:</b> ${tipFor(hero.target || enemy)}`}`;
   const s = game.stats; $('#endStats').innerHTML = `<div><b>${Math.round(s.dealt)}</b><span>DAMAGE DEALT</span></div><div><b>${Math.round(s.taken)}</b><span>DAMAGE TAKEN</span></div><div><b>${s.maxCombo}</b><span>BEST COMBO</span></div>`;
+  let ag = 'REMATCH';
+  if (game.mode === 'tower') {
+    const T = game.tower, f = T.floor, last = f === TOWER_FLOORS;
+    t.textContent = won ? (last ? 'TOWER CONQUERED' : `FLOOR ${f} CLEARED`) : 'THE TOWER STANDS';
+    $('#endSub').innerHTML = won ? (last ? 'You beat the boss and every floor of the tower.' : `Next: floor ${f + 1} of ${TOWER_FLOORS}${f + 1 === TOWER_FLOORS ? ' — <b style="color:#ff7a4a">THE BOSS</b>' : ''}. Your health carries over (+35% healed).`) : `You fell on floor ${f} of ${TOWER_FLOORS}. Best: floor ${Math.max(PROG.towerBest, f - 1)}.<br><b>Tip:</b> ${tipFor(enemy)}`;
+    $('#endRew').innerHTML = towerRewards(won);
+    T.carry = Math.max(0, hero.hp) / hero.maxHp; T.won = won;
+    ag = won && !last ? 'NEXT FLOOR ▶' : 'NEW CLIMB';
+  } else $('#endRew').innerHTML = matchRewards(won);
+  $('#againBtn').textContent = ag;
   $('#endScreen').classList.remove('hidden'); showHUD(false);
 }
 function tipFor(f) {
@@ -3151,14 +3283,23 @@ function resolveOpponent() {
   const FEL = { kazan: 'fire', rakan: 'earth', sira: 'water', rayn: 'fire', master: 'fire' };
   game.sel.ai = { char: ch, el: FEL[ch] || (o.el === 'random' ? pick(ELS) : o.el) };
 }
+function makeBoss(f) {
+  f.boss = true; f.maxHp = Math.round(f.maxHp * BOSS.hp); f.hp = f.maxHp; f.name = 'BOSS · ' + f.name;
+  f.rig.root.scale.multiplyScalar(BOSS.scale); syncRightBar(f, true);
+  fb('fire_ring', { follow: () => f.hp > 0 && FIGHTERS.includes(f) ? _sv.set(f.pos.x, f.pos.y + .1, f.pos.z) : null, size: 3.6, loop: true, speed: .9, opacity: .7, tint: 0xff5030, mode: 'flat' });
+}
 async function beginMatch(mode, reroll = true) {
   Sfx.init(); Sfx.play('select'); goFullscreen();
   game.mode = mode; game.diff = PROFILE.diff;
   const FELP = { kazan: 'fire', rakan: 'earth', sira: 'water', rayn: 'fire', master: 'fire' };
   const selOf = (char, elPref) => { const ch = char === 'random' ? pick(availableChars()).id : char; return { char: ch, el: FELP[ch] || (!elPref || elPref === 'random' ? pick(ELS) : elPref) }; };
+  if (!owns(PROFILE.char)) PROFILE.char = 'raven';
   game.sel.p = { char: PROFILE.char, el: FELP[PROFILE.char] || PROFILE.el };
   let slots = null;
-  if (mode === 'training') game.sel.ai = { char: 'dummy' };
+  if (mode === 'tower') { if (reroll || !game.tower) towerNew(); towerFloorSetup(); }
+  else game.mapId = PROFILE.map === 'random' ? pick(Object.keys(MAPS)) : (PROFILE.map || 'temple');
+  if (mode === 'training') { game.sel.ai = { char: 'dummy' }; game.mapId = 'temple'; }
+  else if (mode === 'tower') { }
   else if (mode === 'duo') {
     const ally = selOf((PROFILE.ally && PROFILE.ally.char) || 'random');
     const e1 = selOf(PROFILE.opp.char, PROFILE.opp.el), e2 = selOf('random');
@@ -3168,13 +3309,19 @@ async function beginMatch(mode, reroll = true) {
     const e1 = selOf(PROFILE.opp.char, PROFILE.opp.el), e2 = selOf('random');
     slots = [Object.assign({ team: 0, isPlayer: true }, game.sel.p), Object.assign({ team: 1 }, e1), Object.assign({ team: 2 }, e2)];
     game.sel.ai = e1;
-  } else if (reroll) resolveOpponent();
+  } else if (mode !== 'tower' && reroll) resolveOpponent();
   if (!(await ensureChars(slots ? slots.map(s => s.char) : [game.sel.p.char, game.sel.ai.char]))) return;
   $('#lobby').classList.remove('on'); $('#lobby').classList.add('hidden'); $('#endScreen').classList.add('hidden'); $('#pause').classList.add('hidden');
   game.stats = { dealt: 0, taken: 0, maxCombo: 0, comboDmg: 0 };
   if (ARENA.lobbyPad) ARENA.lobbyPad.visible = false; if (ARENA.lobbyKey) ARENA.lobbyKey.visible = false;
   setWorldScale(mode === 'duo' ? 1.35 : mode === 'rumble' ? 1.2 : 1);
-  setupFighters(slots); game.wins = [0, 0]; game.round = 1; game.winTeam = undefined; showHUD(true); startRound();
+  applyMap(game.mapId);
+  setupFighters(slots); game.wins = [0, 0]; game.round = 1; game.winTeam = undefined;
+  if (mode === 'tower') { if (game.sel.ai.boss) makeBoss(enemy); }
+  showHUD(true); startRound();
+  if (mode === 'tower') { const T = game.tower; if (T.floor > 1) hero.hp = Math.min(hero.maxHp, Math.max(.25, T.carry) * hero.maxHp + .35 * hero.maxHp);
+    later(.4, () => announce(T.floor === TOWER_FLOORS ? 'BOSS FLOOR' : `FLOOR ${T.floor} / ${TOWER_FLOORS}`, (MAPS[game.mapId] || MAPS.temple).name.toUpperCase())); }
+  else if (game.mapId !== 'temple') later(.4, () => announce((MAPS[game.mapId]).name.toUpperCase(), MAPS[game.mapId].desc.split(';')[0].split('—')[0].toUpperCase()));
 }
 const startMatch = () => beginMatch('versus');
 function togglePause() {
@@ -3226,7 +3373,7 @@ function initLobby() {
   $('#resumeBtn').onclick = togglePause;
   $('#restartBtn').onclick = () => { $('#pause').classList.add('hidden'); if (game.mode === 'training') { game.state = 'fight'; clearField(); startRound(); } else beginMatch('versus', false); };
   $('#quitBtn').onclick = toLobby; $('#menuBtn').onclick = toLobby;
-  $('#againBtn').onclick = () => beginMatch(game.mode, false);
+  $('#againBtn').onclick = () => { if (game.state !== 'end' || game._starting) return; game._starting = true; setTimeout(() => game._starting = false, 1500); if (game.mode === 'tower') { const T = game.tower; if (T && T.won && T.floor < TOWER_FLOORS) { T.floor++; beginMatch('tower', false); } else beginMatch('tower', true); } else beginMatch(game.mode, false); };
   $('#pauseBtn').onclick = togglePause;
   if (IS_TOUCH) buildTouch();
 }
@@ -3242,7 +3389,7 @@ function lobbyShowcase() {
   const s = ARENA.lobbySpot; hero.reset(new V3(s.x, ARENA.lobbyTop, s.z)); hero.onGround = true;
 }
 function toLobby() {
-  setWorldScale(1);
+  setWorldScale(1); applyMap('temple');
   game.state = 'menu'; game.mode = 'lobby'; game.timeScale = 1; game.hitstop = 0;
   ['#pause', '#endScreen'].forEach(s => $(s).classList.add('hidden')); showHUD(false); clearField();
   lobbyShowcase(); LOBBY.tab = null; renderLobby();
@@ -3280,20 +3427,24 @@ function renderLobby() {
       <div class="sec"><label>OPPONENT</label>${seg('data-oc', oppChars, PROFILE.opp.char)}</div>
       ${CHAR_EL[PROFILE.opp.char] ? '' : `<div class="sec"><label>OPPONENT ELEMENT${PROFILE.opp.char === 'random' ? ' (IF RAVEN)' : ''}</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>`}
       <div class="sec"><label>AI DIFFICULTY</label>${seg('data-d', [['easy', 'EASY'], ['normal', 'NORMAL'], ['hard', 'HARD']], PROFILE.diff)}</div>
-      <div class="sec"><label>MODE</label>${seg('data-mode', [['versus', '1 VS 1'], ['duo', '2 VS 2'], ['rumble', 'RUMBLE'], ['training', 'TRAINING']], PROFILE.mode)}</div>
+      <div class="sec"><label>MODE</label>${seg('data-mode', [['versus', '1 VS 1'], ['duo', '2 VS 2'], ['rumble', 'RUMBLE'], ['tower', '🗼 TOWER'], ['training', 'TRAINING']], PROFILE.mode)}</div>
+      ${PROFILE.mode === 'tower' ? `<div class="sec"><label>TOWER · BEST FLOOR ${PROG.towerBest} / ${TOWER_FLOORS}</label><p class="note">Eight fights in a row, one round each, on changing maps. The difficulty rises every floor, your health carries over between floors (+35% healed), and floor 8 is a giant <b style="color:#ff7a4a">BOSS</b> with double health. Coins on every floor — +500 for conquering it.</p></div>` : ''}
+      ${PROFILE.mode !== 'tower' && PROFILE.mode !== 'training' ? `<div class="sec"><label>MAP</label>${seg('data-map', [...Object.entries(MAPS).map(([k, m]) => [k, m.icon + ' ' + m.name.split(' ')[0].toUpperCase()]), ['random', 'RANDOM']], PROFILE.map || 'temple')}<p class="note" style="margin-top:4px">${(MAPS[PROFILE.map] || { desc: 'A random map each match.' }).desc}</p></div>` : ''}
       ${PROFILE.mode === 'duo' ? `<div class="sec"><label>YOUR ALLY (AI)</label>${seg('data-ac', oppChars, (PROFILE.ally && PROFILE.ally.char) || 'random')}<p class="note" style="margin-top:4px">2 vs 2 on a larger arena — you and your ally against two AI fighters. A second random opponent joins the one picked above.</p></div>` : ''}
       ${PROFILE.mode === 'rumble' ? `<div class="sec"><label>RUMBLE</label><p class="note">Three fighters, everyone against everyone, on a larger arena. A random third fighter joins. Last one standing wins the round — if you fall, the round is lost.</p></div>` : ''}`;
     const modeTag = PROFILE.mode === 'duo' ? '2 VS 2 · ' : PROFILE.mode === 'rumble' ? 'RUMBLE · ' : '';
+    B.innerHTML = progStrip() + B.innerHTML;
     const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : modeTag + `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${CHAR_EL[PROFILE.opp.char] ? CHAR_EL[PROFILE.opp.char][1].split(' ')[0] : PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
-    playFoot('PLAY', oppTxt);
+    playFoot('PLAY', PROFILE.mode === 'tower' ? `TOWER · 8 FLOORS · BEST ${PROG.towerBest}` : oppTxt);
   } else if (LOBBY.nav === 'chars') {
     H.textContent = 'CHARACTERS';
-    B.innerHTML = `<div class="grid2">${ROSTER.map(c => {
+    B.innerHTML = progStrip() + `<div class="grid2">${ROSTER.map(c => {
       const eq = c.id === PROFILE.char, frm = eq ? 'card_green' : c.available ? 'card_gold' : 'card_gray';
       const art = c.img ? `<div class="art" style="background-image:url(${c.img})"></div>` : `<div class="sil">${SIL_SVG}</div>`;
-      const tag = eq ? '<span class="tag eq">EQUIPPED</span>' : c.available ? '<span class="tag">SELECT</span>' : '<span class="tag">🔒 COMING SOON</span>';
+      const own = owns(c.id), U = UNLOCK[c.id];
+      const tag = eq ? '<span class="tag eq">EQUIPPED</span>' : !c.available ? '<span class="tag">🔒 COMING SOON</span>' : own ? '<span class="tag">SELECT</span>' : `<span class="tag lock">🔒 LV ${U.lvl} · ${U.coins} 🪙</span>`;
       return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? CHAR_EL[c.id][0] : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
-    }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">More fighters are on the way. Locked fighters can’t be picked and never appear as a random opponent.</p>`;
+    }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">Locked fighters 🔒 unlock when you reach their level — or buy them early with coins 🪙 earned in every match and on every Tower floor. You can still meet them as opponents.</p>`;
     F.innerHTML = '';
   } else if (LOBBY.nav === 'inv') {
     H.textContent = 'INVENTORY';
@@ -3318,7 +3469,8 @@ function renderLobby() {
   B.querySelectorAll('[data-ac]').forEach(b => b.onclick = () => { if (b.dataset.locked) { toast('Coming soon'); return; } (PROFILE.ally = PROFILE.ally || {}).char = b.dataset.ac; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { PROFILE.diff = b.dataset.d; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { PROFILE.mode = b.dataset.mode; saveProfile(); Sfx.play('select'); renderLobby(); });
-  B.querySelectorAll('[data-char]').forEach(b => b.onclick = () => { const c = ROSTER.find(x => x.id === b.dataset.char); if (!c.available) { toast('Coming soon'); return; } selectChar(c.id); });
+  B.querySelectorAll('[data-map]').forEach(b => b.onclick = () => { PROFILE.map = b.dataset.map; saveProfile(); Sfx.play('select'); renderLobby(); });
+  B.querySelectorAll('[data-char]').forEach(b => b.onclick = () => { const c = ROSTER.find(x => x.id === b.dataset.char); if (!c.available) { toast('Coming soon'); return; } if (!owns(c.id) && !buyChar(c.id)) return; selectChar(c.id); });
   B.querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { const s = SKINS[PROFILE.char].find(x => x.id === b.dataset.skin); if (!s.available) { toast('Coming soon'); return; } (PROFILE.skins = PROFILE.skins || {})[PROFILE.char] = s.id; PROFILE.skin = s.id; saveProfile(); renderLobby(); });
   const pb = $('#playBtn'); if (pb) pb.onclick = () => beginMatch(LOBBY.nav === 'train' ? 'training' : PROFILE.mode);
   renderTab();
@@ -3449,6 +3601,7 @@ function frame(rdt) {
   game.time += dt;
   if (!paused) {
     if (['intro', 'fight', 'ko'].includes(game.state)) {
+      updateWeather(dt);
       for (const f of FIGHTERS) { const nt = pickTarget(f); if (nt) f.target = nt; }
       if (hero.target && hero.target !== enemy) { enemy = hero.target; syncRightBar(enemy); }
       if (window.__heroAI) window.__heroAI.update(dt, enemy); else if (game.state === 'fight') readPlayerIntent(); else hero.intent = hero.blankIntent();
@@ -3498,6 +3651,6 @@ function frame(rdt) {
   if (PROFILE.char !== 'raven') { const want = PROFILE.char; PROFILE.char = 'raven'; selectChar(want); }
   setupInstall();
   $('#loading').classList.add('hidden');
-  window.__game = { game, get hero() { return hero; }, get enemy() { return enemy; }, get FIGHTERS() { return FIGHTERS; }, setWorldScale, pickTarget, startMatch, beginMatch, ensureChars, LAVA, TELES, toLobby, renderLobby, LOBBY, PROFILE, AB, BAL, AI, CAM, KEYS, PRESSED, TOUCH, PROJ, OBS, SETTINGS, renderer, step(n, keys = []) { for (let i = 0; i < n; i++) { keys.forEach(k => PRESSED.add(k)); keys = []; frame(1 / 60); } }, cam(p, l) { DEBUG_CAM = p ? [new V3(...p), new V3(...l)] : null; } };
+  window.__game = { game, get hero() { return hero; }, get enemy() { return enemy; }, get FIGHTERS() { return FIGHTERS; }, PROG, MAPS, MAPF, applyMap, applyHit, grantRewards, owns, buyChar, hazardStrike, setWorldScale, pickTarget, startMatch, beginMatch, ensureChars, LAVA, TELES, toLobby, renderLobby, LOBBY, PROFILE, AB, BAL, AI, CAM, KEYS, PRESSED, TOUCH, PROJ, OBS, SETTINGS, renderer, step(n, keys = []) { for (let i = 0; i < n; i++) { keys.forEach(k => PRESSED.add(k)); keys = []; frame(1 / 60); } }, cam(p, l) { DEBUG_CAM = p ? [new V3(...p), new V3(...l)] : null; } };
   loop();
 })();
