@@ -301,6 +301,7 @@ const FLIP_DEF = { // name: [additive, fps] — every atlas is cut from the user
   tornado: [0, 16], dust_tornado: [0, 14], dust_puff: [0, 18], dust_wave: [0, 18],
   rock_burst: [0, 20], crater: [0, 14], rocks_float: [0, 12],
   lightning_orb: [1, 22], bolt: [1, 30], bolt_branch: [1, 26], lightning_beam: [1, 24],
+  ice_spike: [1, 15], ice_burst: [1, 24], ice_orb: [1, 16],
 };
 function loadFlipbooks(onP, only) {
   const L = new THREE.TextureLoader(); const names = only || Object.keys(FLIP_DEF).filter(n => !FLIP.tex[n]); let done = 0; if (!names.length) { onP(1); return Promise.resolve(); }
@@ -1036,9 +1037,10 @@ function buildRavenKits() {
       pref: U.pref, speed: BAL.moveSpeed * MOBILITY[el].speed, aggr: .75, blockP: .45, jumpP: MOBILITY[el].jumpP, airJumps: MOBILITY[el].airJumps, glide: MOBILITY[el].glide, armor: 1, heal: 0 };
   }
 }
-const MASTER_KIT = { name: 'All', desc: 'Commands all five elements and fuses any two into a combined technique. Double jump, glide and dash. Super: <b>Avatar State</b>. Shield: a fused five-element barrier — reflects, deflects, burns and shocks.',
-  moves: [['fire', 1.4, 3, 2, 22], ['water', 1.6, 2, 2, 22], ['wind', 1.4, 2, 2, 16], ['earth', 1.8, 2, 2, 22], ['lightning', 1.6, 2, 2, 24], ['fire+wind', 4, 1.2, 3, 18], ['earth+fire', 5, 1, 4, 22], ['water+wind', 3, 1.2, 3, 18], ['earth+water', 4, 1, 3, 16], ['fire+water', 5, 1, 0, 3.5], ['earth+wind', 4, 1, 3, 18], ['fire+lightning', 4, 1.2, 3, 22], ['lightning+water', 4, 1, 3, 18], ['lightning+wind', 5, 1, 4, 22], ['earth+lightning', 4, 1, 4, 24]],
-  superAb: 'avatar', pref: 7, speed: 6.8, aggr: .75, blockP: .5, jumpP: .35, airJumps: 1, glide: true, armor: 1 };
+const MASTER_KIT = { name: 'All', basic: null, btn: [['mswap', 'Element'], ['m1', 'Skill 1'], ['m2', 'Skill 2']], superAb: 'm_su', fuse: 'mfuse', superR: [2, 12],
+  desc: 'Commands all <b>six</b> elements — fire, water, earth, wind, ice and lightning. Land a skill to store its <b>seal</b>, switch element, then press <b>Fusion</b> to combine the two (15 fusions). Energy: 100, regen 8/s.',
+  moves: [['m1', .5, 3, 2, 18], ['m2', .8, 2.4, 0, 12]],
+  pref: 6, speed: 6.4, aggr: .8, blockP: .5, jumpP: .35, airJumps: 1, glide: true, armor: 1 };
 
 // ---------------------------------------------------------------- PROJECTILES
 const PROJ = [], WALLS = [], TIMERS = [];
@@ -1053,6 +1055,7 @@ function buildVis(vis, el) {
     case 'wind': m = new THREE.Mesh(new THREE.TorusGeometry(.55, .07, 6, 28), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 1.6, 1.8), transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false })); break;
     case 'rock': m = new THREE.Mesh(rockGeo(.52, 1, rand(0, 9)), MATS.rocks[1]); break;
     case 'pebble': m = new THREE.Mesh(rockGeo(.17, 0, rand(0, 9)), MATS.rocks[0]); break;
+    case 'ice_needle':
     case 'ice': m = new THREE.Mesh(new THREE.OctahedronGeometry(.17), new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x2a6aa0, roughness: .1, metalness: .2, transparent: true, opacity: .9 })); m.scale.set(1, 1, 3.4); break;
     case 'crescent': m = new THREE.Mesh(new THREE.TorusGeometry(.85, .09, 6, 20, Math.PI), new THREE.MeshBasicMaterial({ color: new THREE.Color(e.c[0] * 1.5, e.c[1] * 1.5, e.c[2] * 1.5), transparent: true, opacity: .8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); m.geometry.rotateZ(-Math.PI / 2); m.geometry.rotateY(Math.PI / 2); break;
     case 'bolt': m = new THREE.Mesh(new THREE.SphereGeometry(.16, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2, 2.6) })); m.add(glowSprite(0xb59cff, 1.8, .95)); break;
@@ -1073,8 +1076,7 @@ function killProj(p, fx = true) {
   if (fx && p.aoe) {
     const a = p.aoe, c = p.pos.clone(); FX.burst(c, a.el, 30, 7, 1.4); FX.burst(c, 'water', 16, 5, 1.2); Sfx.play('lightning'); shake(.3);
     for (let i = 0; i < 7; i++) { const e = c.clone().add(_v1.randomDirection().multiplyScalar(a.r)); e.y = Math.max(e.y, groundAt(e.x, e.z) + .1); boltFX(c, e, 0xb59cff, .07, .25); }
-    const tgt = p.owner === hero ? enemy : hero;
-    if (capsuleDist(c, tgt) < a.r && !tgt.ghost()) applyHit(p.owner, tgt, { dmg: a.dmg, kb: 4, stun: a.stun, el: a.el, from: c });
+    for (const tgt of opps(p.owner)) if (capsuleDist(c, tgt) < a.r && !tgt.ghost()) applyHit(p.owner, tgt, { dmg: a.dmg, kb: 4, stun: a.stun, el: a.el, from: c });
   }
   if (fx && p.kind === 'ball') {
     const small = p.vis === 'pebble' || p.vis === 'ice' || p.vis === 'shard';
@@ -1125,8 +1127,8 @@ function spawnSpikes(f, t, o) {
     for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2, rr = i ? o.radius * .55 : 0; const c = M(new THREE.ConeGeometry(.3, 1.9, 6), MATS.rocks[1], Math.cos(a) * rr, 0, Math.sin(a) * rr, g); c.rotation.set(rand(-.25, .25), 0, rand(-.25, .25)); }
     TWEENS.push({ t: 0, d: 1.1, f: k => { g.position.y = pos.y + (k < .15 ? lerp(-1.2, .8, k / .15) : k > .7 ? lerp(.8, -1.3, (k - .7) / .3) : .8) - .8; }, end: () => scene.remove(g) });
     FX.earth(pos.clone().setY(pos.y + .2), 18, o.radius); Sfx.play('earth'); shake(.35); decal(pos, 'crack', 3);
-    const d = Math.hypot(t.pos.x - pos.x, t.pos.z - pos.z);
-    if (d < o.radius + .3 && t.pos.y - pos.y < 1.2) applyHit(f, t, { dmg: o.dmg, kb: 2, launch: 11, el: 'earth', from: pos, heavy: true });
+    for (const T of opps(f)) { const d = Math.hypot(T.pos.x - pos.x, T.pos.z - pos.z);
+    if (d < o.radius + .3 && T.pos.y - pos.y < 1.2) applyHit(f, T, { dmg: o.dmg, kb: 2, launch: 11, el: 'earth', from: pos, heavy: true }); }
   });
 }
 function spawnWall(f, t, o = {}) {
@@ -1138,6 +1140,7 @@ function spawnWall(f, t, o = {}) {
   WALLS.push({ owner: f, pos, dir, mesh: m, hp: o.hp || 30, t: 0, life: o.life || 4.5, half: 1.5, both: !!o.both }); FX.earth(pos.clone().setY(pos.y + .2), 20, 1.4); decal(pos, 'crack', 3); Sfx.play('earth'); shake(.25);
 }
 function spawnBlockWall(f, t, kind = 'earth') {
+  if (kind === 'stone') { const w = spawnBlockWall(f, t, 'earth'); if (w) { w.mesh.scale.set(1.45, 1.35, 1.2); w.half = 1.6; w.hp = 60; fb('rock_burst', { pos: f.pos.clone().addScaledVector(new V3(Math.sin(f.yaw), 0, Math.cos(f.yaw)), 1.3).setY(f.pos.y + .5), size: 2.6 }); fb('dust_puff', { pos: f.pos.clone().setY(f.pos.y + .4), size: 2.8, opacity: .8, speed: 1.6 }); } return w; }
   const dir = new V3(Math.sin(f.yaw), 0, Math.cos(f.yaw));
   const pos = f.pos.clone().addScaledVector(dir, 1.05); pos.y = f.pos.y;
   if (kind === 'water') {
@@ -1181,13 +1184,13 @@ function spikeLine(f, t, dmg = 12) {
   });
   shake(.3);
 }
-function waterWhip(f, t, side = 'R', dmg = 9) {
+function waterWhip(f, t, side = 'R', dmg = 9, extra = {}) {
   const from = handPos(f, side), to = t.pos.clone().setY(t.pos.y + 1); const dir = to.clone().sub(from).normalize(); const len = Math.min(from.distanceTo(to), 7);
   fb('water_stream', { pos: from.clone().addScaledVector(dir, len / 2), size: [len, 1.3], mode: 'beam', dir: dir.clone(), speed: 2.4 });
   for (let i = 0; i < 12; i++) { _v1.copy(from).addScaledVector(dir, i / 12 * len); _v1.y += Math.sin(i * .5) * .15; PADD.emit(_v1.x, _v1.y, _v1.z, rand(-.3, .3), rand(-.3, .3), rand(-.3, .3), .3, .75, 1.7, rand(.25, .4), rand(.25, .4), 3, 1, .05); }
   Sfx.play('water');
   const fwd = new V3(Math.sin(f.yaw), 0, Math.cos(f.yaw)); const flat = t.pos.clone().sub(f.pos).setY(0); const fd = flat.length(); flat.normalize();
-  if (fd < 7.1 && fwd.dot(flat) > .55) applyHit(f, t, { dmg, kb: -6, el: 'water', from: f.pos, pull: true });
+  if (fd < 7.1 && fwd.dot(flat) > .55) applyHit(f, t, Object.assign({ dmg, kb: -6, el: 'water', from: f.pos, pull: true }, extra));
 }
 function steamBurst(f, t) {
   const c = f.pos.clone().setY(f.pos.y + 1);
@@ -1278,7 +1281,8 @@ function capsuleDist(p, f) { const y = clamp(p.y, f.pos.y + .25, f.pos.y + 1.7);
 function updateProjectiles(dt) {
   for (const p of PROJ) {
     if (p.dead) continue; p.t += dt;
-    const tgt = p.owner === hero ? enemy : hero; p.target = tgt;
+    let tgt = FIGHTERS.length > 2 ? (nearestOpp(p.owner, p.pos) || p.target) : (p.owner === hero ? enemy : hero);
+    if (!tgt || tgt.hp <= 0) tgt = p.owner === hero ? enemy : hero; p.target = tgt;
     if (p.kind === 'ball') {
       if (p.delay && p.t < p.delay) { FX.el(p.el, p.pos, 2, .3, null, .8); if (p.mesh) { p.mesh.position.copy(p.pos); p.mesh.scale.setScalar(p.t / p.delay); } continue; }
       if (p.rise && p.riseT < p.rise) { p.riseT += dt; p.pos.y = lerp(p.riseFrom, p.owner.pos.y + p.riseTo, ease(Math.min(1, p.riseT / p.rise))); if (p.mesh) p.mesh.position.copy(p.pos); if (p.riseT >= p.rise) p.dir = aimDir(p.owner, p.pos, tgt, .1); continue; }
@@ -1384,7 +1388,7 @@ function updateProjectiles(dt) {
     if (w.hp <= 0 || w.t > w.life) { if (w.personal && w.owner.blockWall === w) w.owner.blockWall = null; FX.burst(w.pos.clone().setY(w.pos.y + 1), 'earth', 30, 6, 1.5); Sfx.play('earth'); for (let k = 0; k < 12; k++) DEBRIS.spawn(w.pos.clone().setY(w.pos.y + rand(.3, 2.3)), _v1.randomDirection().multiplyScalar(rand(2, 6)).setY(rand(2, 6)), rand(1, 2.4)); scene.remove(w.mesh); w.mesh.geometry.dispose(); WALLS.splice(i, 1); }
   }
 }
-const HX = p => ({ skill: p.skill, castId: p.castId, slowPct: p.slowPct });
+const HX = p => ({ skill: p.skill, castId: p.castId, slowPct: p.slowPct, seal: p.seal, freeze: p.freeze, root: p.root, needle: p.needle });
 function wallHit(w, pos, r) { _v4.copy(pos).sub(w.pos); const along = _v4.dot(w.dir); const sx = w.dir.z, sz = -w.dir.x; const side = _v4.x * sx + _v4.z * sz; return Math.abs(along) < .3 + r && Math.abs(side) < w.half + r * .5 && _v4.y < 2.5 && w.t > .15; }
 function clash(a, b) {
   let win = null;
@@ -1401,11 +1405,16 @@ let CAST_ID = 0;
 const SK = (f, o) => Object.assign({ skill: true, castId: f.castId }, o);
 const fwdOf = f => new V3(Math.sin(f.yaw), 0, Math.cos(f.yaw));
 function coneHit(f, t, range, half, dmg, extra = {}) {
-  const to = t.pos.clone().sub(f.pos); const dy = to.y; to.y = 0; const d = to.length();
-  if (d > range || Math.abs(dy) > 2.2 || t.ghost()) return false;
-  if (d > .6 && fwdOf(f).dot(to.normalize()) < Math.cos(half)) return false;
-  if (losBlocked(f.pos, t.pos, 1.3)) return false;
-  applyHit(f, t, SK(f, Object.assign({ dmg, from: f.pos.clone() }, extra))); return true;
+  let any = false;
+  for (const T of (FIGHTERS.length > 2 ? opps(f) : [t])) {
+    if (!T || T.ghost()) continue;
+    const to = T.pos.clone().sub(f.pos); const dy = to.y; to.y = 0; const d = to.length();
+    if (d > range || Math.abs(dy) > 2.2) continue;
+    if (d > .6 && fwdOf(f).dot(to.normalize()) < Math.cos(half)) continue;
+    if (losBlocked(f.pos, T.pos, 1.3)) continue;
+    applyHit(f, T, SK(f, Object.assign({ dmg, from: f.pos.clone() }, extra))); any = true;
+  }
+  return any;
 }
 function aimPoint(f, t, lead = 0) { // AI aim error makes targeted skills miss sometimes
   const p = t.pos.clone().addScaledVector(t.vel, lead); const e = f.aimErr || 0;
@@ -1433,7 +1442,7 @@ function buildKits() {
     fn(f, t) { const P = f.suP, s = B.fire.su;
       fb('explosion', { pos: P.clone().setY(P.y + 2.6), size: 8.5 }); fb('fire_burst', { pos: P.clone().setY(P.y + 1.4), size: 6.5, boost: 1.3 });
       FX.burst(P.clone().setY(P.y + .5), 'fire', 50, 9, 1.8); decal(P, 'scorch', 6); Sfx.play('explode'); shake(.8); flashSky();
-      if (Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 2.5) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 9, launch: 7, knockdown: true, el: 'fire', from: P, heavy: true })); } });
+      for (const T of opps(f)) if (Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < s.radius && T.pos.y - P.y < 2.5) applyHit(f, T, SK(f, { dmg: s.dmg, kb: 9, launch: 7, knockdown: true, el: 'fire', from: P, heavy: true })); } });
   // water
   def('water_s1', { el: 'water', clip: 'magic2h', anim: 'push', hit: .3, speed: 1.7, dur: .75, cd: B.water.s1.cd, label: B.water.s1.name, fn(f, t) {
     const from = handPos(f, 'R'), fw = fwdOf(f), len = B.water.s1.range;
@@ -1457,7 +1466,7 @@ function buildKits() {
       for (let i = 0; i < 11; i++) { const a = i / 11 * Math.PI * 2, rr = i ? rand(.5, 1) * s.radius * .8 : 0; const c = M(new THREE.ConeGeometry(rand(.3, .5), rand(1.6, 2.8), 6), MATS.rocks[i % 2], Math.cos(a) * rr, 0, Math.sin(a) * rr, g); c.rotation.set(rand(-.35, .35), 0, rand(-.35, .35)); }
       TWEENS.push({ t: 0, d: 1.3, f: k => { g.position.y = P.y + (k < .1 ? lerp(-2.4, 0, k / .1) : k > .7 ? lerp(0, -2.6, (k - .7) / .3) : 0); }, end: () => scene.remove(g) });
       FX.burst(P.clone().setY(P.y + .4), 'earth', 24, 8, 2); decal(P, 'crack', 6); Sfx.play('earth'); Sfx.play('explode'); shake(.8); fb('crater', { pos: P.clone().setY(P.y + .3), size: 6, speed: .9 }); fb('dust_wave', { pos: P.clone().setY(P.y + .8), size: [8, 3.5], mode: 'up', speed: 1.2 }); fb('rock_burst', { pos: P.clone().setY(P.y + 1), size: 5 });
-      if (Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 1.6) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 2, launch: 9, lift: true, el: 'earth', from: P, heavy: true })); } });
+      for (const T of opps(f)) if (Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < s.radius && T.pos.y - P.y < 1.6) applyHit(f, T, SK(f, { dmg: s.dmg, kb: 2, launch: 9, lift: true, el: 'earth', from: P, heavy: true })); } });
   // wind
   def('wind_s1', { el: 'wind', clip: 'kick2', anim: 'kick', hit: .22, speed: 1.8, dur: .58, cd: B.wind.s1.cd, label: B.wind.s1.name, fn(f, t) { spawnBall(f, t, SK(f, { el: 'wind', pos: frontPos(f, .9, 1.05), speed: 36, radius: .75, dmg: B.wind.s1.dmg, kb: 3, life: .9, vis: 'crescent' })); Sfx.play('wind'); } });
   def('wind_s2', { el: 'wind', clip: 'hurricane', anim: 'spin', hit: .32, speed: 1.6, dur: .85, cd: B.wind.s2.cd, label: B.wind.s2.name, fn(f, t) {
@@ -1495,14 +1504,14 @@ const KAZAN_KIT = { name: 'Magma', basic: 'magma', btn: [['magma', 'Magma Attack
 const LAVA = [];
 let LAVA_TEX = null;
 function lavaTex() { if (!LAVA_TEX) { LAVA_TEX = new THREE.TextureLoader().load('assets/lava.jpg'); LAVA_TEX.wrapS = LAVA_TEX.wrapT = THREE.RepeatWrapping; LAVA_TEX.colorSpace = THREE.SRGBColorSpace; } return LAVA_TEX; }
-const LAVA_FS = `uniform sampler2D map; uniform float t, fade, circ; uniform vec2 rep; varying vec2 vUv;
+const LAVA_FS = `uniform sampler2D map; uniform float t, fade, circ; uniform vec2 rep; uniform vec3 tintc; varying vec2 vUv;
 void main(){ vec2 uv = vUv * rep; vec3 c = texture2D(map, uv + vec2(t * .03, t * .02)).rgb; vec3 c2 = texture2D(map, uv * 1.7 - vec2(t * .02, -t * .025)).rgb;
-  vec3 col = mix(c, c2, .4); float hot = smoothstep(.25, .9, col.r - col.g * .5); col = col * 1.4 + vec3(1., .35, .05) * hot * (1.2 + .4 * sin(t * 3.));
+  vec3 col = mix(c, c2, .4); float hot = smoothstep(.25, .9, col.r - col.g * .5); col = (col * 1.4 + vec3(1., .35, .05) * hot * (1.2 + .4 * sin(t * 3.))) * tintc;
   float e; if (circ > .5) { e = 1. - smoothstep(.72, 1., length(vUv - .5) * 2.); } else { vec2 d = abs(vUv - .5) * 2.; e = (1. - smoothstep(.6, 1., d.y)) * (1. - smoothstep(.93, 1., d.x)); }
   gl_FragColor = vec4(col, e * fade); }`;
 const LAVA_VS = `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`;
 function lavaMesh(geo, rep, circ) {
-  const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { map: { value: lavaTex() }, t: { value: 0 }, fade: { value: 0 }, circ: { value: circ ? 1 : 0 }, rep: { value: new THREE.Vector2(...rep) } }, vertexShader: LAVA_VS, fragmentShader: LAVA_FS, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  const m = new THREE.Mesh(geo, new THREE.ShaderMaterial({ uniforms: { map: { value: lavaTex() }, t: { value: 0 }, fade: { value: 0 }, circ: { value: circ ? 1 : 0 }, rep: { value: new THREE.Vector2(...rep) }, tintc: { value: new THREE.Color(1, 1, 1) } }, vertexShader: LAVA_VS, fragmentShader: LAVA_FS, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
   m.renderOrder = 3; scene.add(m); return m;
 }
 function addLava(owner, z) {
@@ -1511,7 +1520,9 @@ function addLava(owner, z) {
     const len = z.a.distanceTo(z.b), geo = new THREE.PlaneGeometry(len, z.w); geo.rotateX(-Math.PI / 2);
     z.mesh = lavaMesh(geo, [len / 3, z.w / 3], false); z.mesh.position.set((z.a.x + z.b.x) / 2, Math.max(z.a.y, z.b.y) + .04, (z.a.z + z.b.z) / 2); z.mesh.rotation.y = -Math.atan2(z.b.z - z.a.z, z.b.x - z.a.x);
   } else { const geo = new THREE.CircleGeometry(z.r, 40); geo.rotateX(-Math.PI / 2); z.mesh = lavaMesh(geo, [z.r / 1.6, z.r / 1.6], true); z.mesh.position.set(z.c.x, z.c.y + .04, z.c.z); }
-  Object.assign(z, { owner, t: 0, acc: new Map() }); LAVA.push(z); return z;
+  Object.assign(z, { owner, t: 0 }); LAVA.push(z);
+  later(0, () => { if (z.mud) z.mesh.material.uniforms.tintc.value.setRGB(.42, .3, .18); if (z.zap) z.mesh.material.uniforms.tintc.value.setRGB(.25, .55, 1.3); });
+  return z;
 }
 function removeLava(z) { const i = LAVA.indexOf(z); if (i >= 0) LAVA.splice(i, 1); scene.remove(z.mesh); z.mesh.geometry.dispose(); z.mesh.material.dispose(); }
 function inZone(z, p) {
@@ -1524,12 +1535,14 @@ function updateLava(dt) {
     if (Math.random() < .5) { const p = z.kind === 'line' ? _v1.lerpVectors(z.a, z.b, Math.random()) : _v1.copy(z.c).add(_v2.set(rand(-1, 1) * z.r * .7, 0, rand(-1, 1) * z.r * .7)); FX.fire(_v3.copy(p).setY(p.y + .15), 1, .25, _v4.set(0, 1.5, 0), .7); }
     if (z.t >= z.dur) removeLava(z);
   }
-  for (const tgt of [hero, enemy]) {
-    if (!tgt || tgt.ghost()) continue;
+  for (const tgt of FIGHTERS) {
+    if (!tgt || tgt.hp <= 0 || tgt.ghost()) continue;
     let best = null; for (const z of LAVA) if (z.owner !== tgt && z.t > .15 && inZone(z, tgt.pos) && (!best || z.dps > best.dps)) best = z; // highest zone only, never summed
     if (!best) { tgt.lavaAcc = 0; continue; }
+    if (best.slowPct) { tgt.slowT = Math.max(tgt.slowT, .35); tgt.slowPct = Math.min(.3, best.slowPct); }
+    if (!best.dps) continue;
     tgt.lavaAcc = (tgt.lavaAcc || 0) + dt;
-    if (tgt.lavaAcc >= KZ.lavaTick) { tgt.lavaAcc -= KZ.lavaTick; applyHit(best.owner, tgt, { dmg: best.dps * KZ.lavaTick, kb: 0, el: 'fire', from: tgt.pos.clone().setY(tgt.pos.y - 1), multi: true, noStagger: true, unblockable: true, lava: true }); }
+    if (tgt.lavaAcc >= KZ.lavaTick) { tgt.lavaAcc -= KZ.lavaTick; applyHit(best.owner, tgt, { dmg: best.dps * KZ.lavaTick, kb: 0, el: best.zap ? 'lightning' : 'fire', from: tgt.pos.clone().setY(tgt.pos.y - 1), multi: true, noStagger: true, unblockable: true, lava: true }); }
   }
 }
 function clearLava() { for (const z of [...LAVA]) removeLava(z); }
@@ -1552,7 +1565,7 @@ function buildKazanKit() {
       const fw = fwdOf(f), fist = f.pos.clone().addScaledVector(fw, 1.5); Sfx.play('heavy'); Sfx.play('fire');
       const hit1 = coneHit(f, t, KZ.s1.range, .75, KZ.s1.punch, { kb: 2, el: 'fire', heavy: true });
       later(.12, () => { if (game.state !== 'fight' && game.state !== 'ko') return; kazanFx(fist, false); Sfx.play('explode'); shake(.3);
-        let hit2 = false; if (!t.ghost() && Math.hypot(t.pos.x - fist.x, t.pos.z - fist.z) < KZ.s1.blastR && Math.abs(t.pos.y - fist.y) < 2) { applyHit(f, t, SK(f, { dmg: KZ.s1.blast, kb: 6, launch: 3, el: 'fire', from: fist, heavy: true })); hit2 = true; }
+        let hit2 = false; for (const T of opps(f)) if (!T.ghost() && Math.hypot(T.pos.x - fist.x, T.pos.z - fist.z) < KZ.s1.blastR && Math.abs(T.pos.y - fist.y) < 2) { applyHit(f, T, SK(f, { dmg: KZ.s1.blast, kb: 6, launch: 3, el: 'fire', from: fist, heavy: true })); hit2 = true; }
         if (!hit1 && !hit2 && f.cast) f.cast.dur = f.cast.a.dur + KZ.s1.recover; }); // a whiff leaves Kazan open
     } });
   def('kz_s2', { el: 'fire', clip: 'magic_area', anim: 'stomp', hit: .5, speed: 1.4, dur: .95, cd: KZ.s2.cd, label: KZ.s2.name,
@@ -1567,7 +1580,7 @@ function buildKazanKit() {
         const n = 6; for (let i = 0; i <= n; i++) later(i * .04, () => { const p = new V3().lerpVectors(a, b, i / n); fb('fire_burst', { pos: p.clone().setY(p.y + 1), size: 2.3, boost: 1.1 }); FX.earth(p.clone().setY(p.y + .2), 4, .6); if (i % 2 === 0) decal(p, 'scorch', 2.2); });
         Sfx.play('explode'); Sfx.play('fire'); shake(.4);
         const z = addLava(f, { kind: 'line', a, b, w: KZ.s2.width, dur: KZ.s2.lavaDur, dps: KZ.s2.lavaDps });
-        if (!t.ghost() && inZone(z, t.pos)) applyHit(f, t, { dmg: KZ.s2.dmg, kb: 3, launch: 5, el: 'fire', from: t.pos.clone().setY(t.pos.y - 1), heavy: true, skill: true, castId: cid, unblockable: false });
+        for (const T of opps(f)) if (!T.ghost() && inZone(z, T.pos)) applyHit(f, T, { dmg: KZ.s2.dmg, kb: 3, launch: 5, el: 'fire', from: T.pos.clone().setY(T.pos.y - 1), heavy: true, skill: true, castId: cid, unblockable: false });
       });
     } });
   def('kz_su', { el: 'fire', clip: 'magic2h3', anim: 'burst', hit: KZ.su.warn, speed: 1.6, dur: KZ.su.warn + .45, cd: 1, super: true, power: 3, label: KZ.su.name,
@@ -1580,7 +1593,7 @@ function buildKazanKit() {
     fn(f, t) { const P = f.suP, s = KZ.su;
       fb('explosion', { pos: P.clone().setY(P.y + 2.6), size: 9 }); kazanFx(P, true); decal(P, 'scorch', 7); Sfx.play('explode'); Sfx.play('earth'); shake(.9); flashSky();
       addLava(f, { kind: 'circle', c: P.clone(), r: s.radius, dur: s.lavaDur, dps: s.lavaDps });
-      if (!t.ghost() && Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 2.5) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 8, launch: 6, el: 'fire', from: P, heavy: true })); } });
+      for (const T of opps(f)) if (!T.ghost() && Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < s.radius && T.pos.y - P.y < 2.5) applyHit(f, T, SK(f, { dmg: s.dmg, kb: 8, launch: 6, el: 'fire', from: P, heavy: true })); } });
 }
 // Magma Heat — skills build it, the 3rd combo hit spends it
 function kazanPerk(att, tgt, h, dmg) {
@@ -1601,6 +1614,7 @@ function projFX(p) { // replaces the code-drawn projectile with filmed fire / wa
   if (v === 'fire' || (v === 'orb' && p.el === 'fire')) { main = fb('fireball', { follow, size: r * E.projK, loop: true, speed: 1.4, tint: 0xffa860, boost: .85 }); p.fbh = [fb('fire_loop', { follow, size: r * 3.2, loop: true, speed: 1.6, opacity: .8 })]; }
   else if (v === 'water' || v === 'ewater') main = fb('water_orb', { follow, size: r * 3.2, loop: true, speed: 1.3, opacity: .95 });
   else if (v === 'bolt') main = fb('lightning_orb', { follow, size: .95, loop: true, speed: 1.6, boost: 1.2 });
+  else if (v === 'ice_needle') main = fb('ice_orb', { follow, size: 1.5, loop: true, speed: 1.8, boost: 1.15 });
   else if (v === 'lance') main = fb('lightning_orb', { follow, size: 1.5, loop: true, speed: 1.8, boost: 1.3 });
   else if (v === 'wind') main = fb('water_vortex', { follow, size: r * 3.2, loop: true, speed: 2, desat: 1, tint: 0xffffff, boost: 1.35, opacity: .95 });
   else if (v === 'gale') main = fb('tornado', { follow, size: [r * 2.4, r * 3], loop: true, speed: 1.6, mode: 'up', opacity: .9 });
@@ -1616,6 +1630,7 @@ function impactFX(el, pos, heavy, big = 1) {
   else if (el === 'water') { fb('water_splash', { pos, size: 2.9 * s, speed: 1.4 }); }
   else if (el === 'wind') { fb('dust_puff', { pos: _v4.copy(pos).setY(pos.y - .3), size: 2.6 * s, opacity: .7, speed: 1.7 }); fb('water_vortex', { pos, size: 1.9 * s, speed: 2.4, desat: 1, tint: 0xffffff, boost: 1.3, opacity: .8 }); }
   else if (el === 'earth') { fb('rock_burst', { pos: _v4.copy(pos).setY(pos.y - .2), size: 3.1 * s }); fb('dust_puff', { pos, size: 2.5 * s, opacity: .85, speed: 1.5 }); }
+  else if (el === 'ice') { fb('ice_burst', { pos, size: 2.1 * s, speed: 1.8 }); if (heavy) fb('ice_spike', { pos: _v4.copy(pos).setY(pos.y - .9), size: [2.2 * s, 2 * s], mode: 'up', speed: 1.6 }); }
   else if (el === 'lightning') { fb('bolt_branch', { pos, size: 2 * s, speed: 1.8, boost: 1.2 }); fb('lightning_orb', { pos, size: 1.3 * s, speed: 2.5 }); }
 }
 function muzzleFX(f, el) {
@@ -1732,9 +1747,192 @@ function buildRakanKit() {
       fb('crater', { pos: P.clone().setY(P.y + .3), size: 7, speed: .9 }); fb('rock_burst', { pos: P.clone().setY(P.y + 1.2), size: 6.5 }); fb('dust_wave', { pos: P.clone().setY(P.y + .9), size: [9, 4], mode: 'up', speed: 1.2 }); fb('explosion', { pos: P.clone().setY(P.y + 2), size: 5, opacity: .85 });
       FX.burst(P.clone().setY(P.y + .4), 'earth', 30, 9, 2); decal(P, 'crack', 7); Sfx.play('explode'); Sfx.play('earth'); shake(1); flashSky();
       for (let i = 0; i < 16; i++) DEBRIS.spawn(P.clone().setY(P.y + .5), _v1.randomDirection().multiplyScalar(rand(3, 9)).setY(rand(4, 10)), rand(1, 2.4));
-      if (!t.ghost() && Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < s.radius && t.pos.y - P.y < 3) applyHit(f, t, SK(f, { dmg: s.dmg, kb: 13, launch: 5, knockdown: true, el: 'earth', from: P, heavy: true, push: true })); } });
+      for (const T of opps(f)) if (!T.ghost() && Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < s.radius && T.pos.y - P.y < 3) applyHit(f, T, SK(f, { dmg: s.dmg, kb: 13, launch: 5, knockdown: true, el: 'earth', from: P, heavy: true, push: true })); } });
 }
-buildKits(); buildKazanKit(); buildRakanKit(); buildBasics();
+// ---------------------------------------------------------------- ICE ELEMENT + FILMED ELEMENT SHIELDS
+EL.ice = { name: 'Ice', color: 0x9adcff, c: [.62, .88, 1], icon: '❄️' };
+const ELS6 = [...ELS, 'ice'];
+FX.ice = function (p, n = 5, sp = .2, v = null, sc = 1) { for (let i = 0; i < n; i++) PADD.emit(p.x + rand(-sp, sp), p.y + rand(-sp, sp), p.z + rand(-sp, sp), (v ? v.x : 0) + rand(-1, 1), (v ? v.y : 0) + rand(-.3, 1.5), (v ? v.z : 0) + rand(-1, 1), .55, .85, 1, rand(.1, .2) * sc, rand(.3, .6), 2, 0, .04, .7); };
+EFX.ice = { proj: 'ice_orb', hit: 'ice_burst', muzzle: 'ice_burst', charge: 'ice_orb' };
+const _sv = new V3();
+const relF = (f, dx, dy, dz, cond) => () => (cond ? cond() : f.state === 'block') ? _sv.set(f.pos.x + Math.sin(f.yaw) * dz + Math.cos(f.yaw) * dx, f.pos.y + dy, f.pos.z + Math.cos(f.yaw) * dz - Math.sin(f.yaw) * dx) : null;
+// every shield is a real element structure cut from the user's videos
+function startShieldFX(f) {
+  const bs = f.blockStyle;
+  if (bs === 'fire' || bs === 'magma') {
+    const tint = bs === 'magma' ? 0xff7a35 : 0xffffff;
+    for (const [dx, dz] of [[0, 1.5], [-1.25, .95], [1.25, .95]]) fb('fire_wall', { follow: relF(f, dx, 1.05, dz), size: [2.1, 1.9], mode: 'up', loop: true, tint, opacity: .95, speed: 1.2 });
+    fb('fire_ring', { follow: relF(f, 0, .12, 0), size: 4.2, loop: true, speed: 1.2, opacity: .9 });
+    if (bs === 'magma') fb('rocks_float', { follow: relF(f, 0, 1.1, 1.2), size: 2, loop: true, opacity: .8 });
+  } else if (bs === 'water') { // water bubble
+    fb('water_orb', { follow: relF(f, 0, 1.05, 0), size: 3.6, loop: true, opacity: .55, speed: 1.2 });
+    fb('water_vortex', { follow: relF(f, 0, .1, 0), size: 3.4, mode: 'flat', loop: true, opacity: .5, speed: 1.4 });
+  } else if (bs === 'wind') { // air wall
+    for (const [dx, dz] of [[0, 1.5], [-1.3, .9], [1.3, .9]]) fb('water_vortex', { follow: relF(f, dx, 1.2, dz), size: [2.1, 2.2], mode: 'up', loop: true, desat: 1, tint: 0xffffff, boost: 1.3, opacity: .75, speed: 2 });
+    fb('dust_puff', { follow: relF(f, 0, .2, 0), size: 3.4, loop: true, opacity: .4, speed: 1.6 });
+  } else if (bs === 'ice' || bs === 'frost') { // ice wall
+    for (const [dx, dz, s] of [[0, 1.5, 2.4], [-1.2, 1, 1.9], [1.2, 1, 1.9]]) fb('ice_spike', { follow: relF(f, dx, .15, dz), size: [s, s * .95], mode: 'up', loop: true, speed: .8, opacity: .95 });
+  } else if (bs === 'lightning') {
+    fb('lightning_orb', { follow: relF(f, 0, 1.1, 0), size: 2.8, loop: true, opacity: .8, speed: 1.6 });
+  } else if (bs === 'all') {
+    fb('energy' in FLIP.tex ? 'energy' : 'lightning_orb', { follow: relF(f, 0, 1.1, 0), size: 2.6, loop: true, opacity: .5, speed: 1.4 });
+  }
+}
+// ---------------------------------------------------------------- SIRA — Frost Blade (fast duelist; numbers from the user's sheet)
+BAL.chars.sira = { hp: 900, speedMul: 1.15, comboSpd: 1.15, dashCD: 1.0, combo: [25, 30, 45], height: 1.8,
+  flow: { markDur: 4, haste: .10, hasteDur: 2, icd: 7, maxSpeed: 1.25 },
+  s1: { name: 'Wave Slide', dmg: 65, cd: 8, distMul: 1.2 },
+  s2: { name: 'Winter Needle', dmg: 80, cd: 10, windup: .35, freeze: .6, slow: .2, slowDur: 1.5, speed: 44 },
+  su: { name: 'Frozen Mirror Dance', warn: .9, cuts: [55, 65, 80], slow: .25, slowDur: 2, len: 9.5, width: 2.4, recover: .5 } };
+const SR = BAL.chars.sira;
+const SIRA_PERK_TEXT = `Water-skill hits mark the enemy <b>Wet</b> for ${SR.flow.markDur} s and grant +${Math.round(SR.flow.haste * 100)}% speed for ${SR.flow.hasteDur} s (every ${SR.flow.icd} s). Winter Needle <b>freezes</b> a Wet enemy; the 3rd sword cut slows them instead.`;
+const SIRA_KIT = { name: 'Frost', basic: 'water', btn: [['water', 'Water Attack'], ['sr_s1', SR.s1.name], ['sr_s2', SR.s2.name]], superAb: 'sr_su', superR: [1, 8],
+  desc: `<b>${SR.s1.name}</b> · <b>${SR.s2.name}</b> · Super: <b>${SR.su.name}</b><br>Perk: ${SIRA_PERK_TEXT}`,
+  moves: [['water', .15, 3, 2, 16], ['sr_s1', .7, 2.6, 2.5, 9], ['sr_s2', .8, 3, 3, 15]], pref: 3, speed: BAL.moveSpeed * 1.15, aggr: .85, blockP: .35, jumpP: .3, airJumps: 1, glide: false, armor: 1, heal: 0 };
+function siraMark(att, tgt) {
+  tgt.sts.wet = SR.flow.markDur; popText(tgt.pos.clone().setY(tgt.pos.y + 2.3), 'WET', '#9fd4ff', 17); fb('water_splash', { pos: tgt.pos.clone().setY(tgt.pos.y + 1.2), size: 1.8, speed: 2 });
+  if ((att.icd.flow || 0) <= 0) { att.icd.flow = SR.flow.icd; att.sts.haste = SR.flow.hasteDur; popText(att.pos.clone().setY(att.pos.y + 2.3), 'FLOW', '#bfe9ff', 16); }
+}
+function buildSiraKit() {
+  def('sr_s1', { el: 'water', clip: 'roll2', anim: 'punch', hit: .05, speed: 1.6, dur: .22, cd: SR.s1.cd, label: SR.s1.name, noMuzzle: true,
+    fn(f, t) {
+      const I = f.intent; const d = new V3(I.mx, 0, I.mz); if (d.lengthSq() < .05) d.copy(t.pos).sub(f.pos).setY(0); d.normalize();
+      f.startDash(d, BAL.dashSpeed * 1.05, BAL.dashTime * SR.s1.distMul, 'water');
+      f.dashAttack = { dmg: SR.s1.dmg, el: 'water', wet: true, hit: false };
+      fb('water_stream', { follow: () => f.state === 'dash' ? f.pos.clone().setY(f.pos.y + .9) : null, size: [2.6, 1.1], loop: true, speed: 2.4, opacity: .9 });
+    } });
+  def('sr_s2', { el: 'water', clip: 'magic2h', anim: 'push', hit: SR.s2.windup, speed: 2.2, dur: SR.s2.windup + .3, cd: SR.s2.cd, label: SR.s2.name,
+    onStart(f) { fb('ice_orb', { follow: () => f.state === 'cast' ? handPos(f, 'R') : null, size: 1, loop: true, life: SR.s2.windup + .1, speed: 2 }); },
+    fn(f, t) { spawnBall(f, t, { el: 'ice', pos: frontPos(f, .9, 1.35), speed: SR.s2.speed, radius: .42, dmg: SR.s2.dmg, kb: 2, vis: 'ice_needle', life: 1.1, needle: true }); Sfx.play('water'); Sfx.play('lightning'); } });
+  def('sr_su', { el: 'ice', clip: 'magic2h3', anim: 'spin', hit: SR.su.warn, speed: 1.6, dur: SR.su.warn + .9 + SR.su.recover, cd: 1, super: true, power: 3, label: SR.su.name, noMove: true,
+    onStart(f, t) { const fw = fwdOf(f); const a = f.pos.clone().addScaledVector(fw, .5), b = f.pos.clone().addScaledVector(fw, SR.su.len); const r = Math.hypot(b.x, b.z); if (r > CFG.ARENA_R) b.multiplyScalar(CFG.ARENA_R / r); a.y = b.y = groundAt(a.x, a.z, f.pos.y + .2); f.suLine = { a, b, dir: fw.clone() }; telegraphLine(a, b, SR.su.width, 0x9adcff, SR.su.warn); },
+    fn(f, t) {
+      const L = f.suLine, cid = f.castId; let step = 0;
+      const inCorridor = (T) => { if (T.ghost()) return false; const dx = L.b.x - L.a.x, dz = L.b.z - L.a.z, L2 = dx * dx + dz * dz; const k = clamp(((T.pos.x - L.a.x) * dx + (T.pos.z - L.a.z) * dz) / L2, 0, 1); return Math.hypot(T.pos.x - L.a.x - dx * k, T.pos.z - L.a.z - dz * k) < SR.su.width / 2 + .4; };
+      for (let i = 0; i < 3; i++) later(.12 + i * .3, () => {
+        if (game.state !== 'fight' && game.state !== 'ko') return;
+        const k = [.3, .62, .95][i]; const P = new V3().lerpVectors(L.a, L.b, k);
+        f.pos.set(P.x, groundAt(P.x, P.z, f.pos.y + .5), P.z); f.vel.set(0, 0, 0); f.yaw = Math.atan2(L.dir.x, L.dir.z);
+        fb('water_stream', { pos: P.clone().setY(P.y + 1), size: [3.4, 1.4], mode: 'beam', dir: L.dir.clone(), speed: 2.6 }); fb('ice_burst', { pos: P.clone().setY(P.y + 1.1), size: 2.4, speed: 2 });
+        FX.ice(P.clone().setY(P.y + 1), 10, .8); Sfx.play('swing'); Sfx.play('water'); if (f.rig.glb) playAttack(f.rig.glb, ['jab2', 'cross', 'kick2'][i], .4, 2.2, 'su' + cid + i);
+        for (const T of opps(f)) if (inCorridor(T)) applyHit(f, T, { dmg: SR.su.cuts[i], kb: i === 2 ? 5 : 1.5, el: 'ice', from: f.pos.clone(), heavy: i === 2, skill: true, castId: cid, multi: i < 2, slow: i === 2 ? SR.su.slowDur : 0, slowPct: SR.su.slow });
+      });
+    } });
+}
+// ---------------------------------------------------------------- RAYN — Flame Blade (sword duelist; numbers from the user's sheet)
+BAL.chars.rayn = { hp: 1000, speedMul: 1, dashCD: 1.2, combo: [30, 35, 50], height: 1.85,
+  ember: { max: 2, dur: 8, extraIgnite: 1 },
+  s1: { name: 'Flame Crescent', dmg: 85, ignDmg: 100, cd: 7, windup: .4 },
+  s2: { name: 'Ignite Blade', dur: 5, cd: 15, windup: .5, meleeBonus: 5, burnDps: 5, burnDur: 3 },
+  su: { name: 'Sun Cleave', dmg: 190, burn: 15, burnDur: 3, warn: 1, len: 10, width: 2.6, recover: .7 } };
+const RY = BAL.chars.rayn;
+const RAYN_PERK_TEXT = `Landing the 3rd sword cut grants an <b>Ember</b> (max ${RY.ember.max}, ${RY.ember.dur} s). Igniting the blade consumes Embers: +1 s of burning blade each. While ignited: sword hits +${RY.s2.meleeBonus}, the 3rd cut burns, and the Crescent deals ${RY.s1.ignDmg}.`;
+const RAYN_KIT = { name: 'Flame', basic: 'fire', btn: [['fire', 'Fire Attack'], ['ry_s1', RY.s1.name], ['ry_s2', RY.s2.name]], superAb: 'ry_su', superR: [1, 8],
+  desc: `<b>${RY.s1.name}</b> · <b>${RY.s2.name}</b> · Super: <b>${RY.su.name}</b><br>Perk: ${RAYN_PERK_TEXT}`,
+  moves: [['fire', .15, 3, 2, 16], ['ry_s1', .6, 3, 3, 14], ['ry_s2', 1.2, 1.6, 0, 3.5]], pref: 2.6, speed: BAL.moveSpeed, aggr: .9, blockP: .35, jumpP: .2, airJumps: 1, glide: false, armor: 1, heal: 0 };
+function swordTip(f, k = 1) { const s = f.rig.glb && f.rig.glb.sword; if (!s) return handPos(f, 'R'); return s.localToWorld(new V3(0, .95 * k, 0)); }
+function buildRaynKit() {
+  def('ry_s1', { el: 'fire', clip: 'magic1h', anim: 'kick', hit: RY.s1.windup, speed: 1.4, dur: RY.s1.windup + .3, cd: RY.s1.cd, label: RY.s1.name,
+    fn(f, t) { const ign = f.igniteT > 0; spawnBall(f, t, { el: 'fire', pos: frontPos(f, 1, 1.1), speed: 24, radius: 1.1, dmg: ign ? RY.s1.ignDmg : RY.s1.dmg, kb: 5, life: 1.1, vis: 'crescent', big: ign }); Sfx.play('fire'); Sfx.play('swing'); } });
+  def('ry_s2', { el: 'fire', clip: 'power_up', anim: 'lift', hit: RY.s2.windup, speed: 1.6, dur: RY.s2.windup + .3, cd: RY.s2.cd, label: RY.s2.name, noMuzzle: true,
+    fn(f) { const extra = (f.embers || 0) * RY.ember.extraIgnite; f.embers = 0; f.igniteT = RY.s2.dur + extra; Sfx.play('fire');
+      fb('fire_burst', { pos: swordTip(f, .6), size: 1.6, speed: 2 }); popText(f.pos.clone().setY(f.pos.y + 2.5), 'BLADE IGNITED' + (extra ? ` +${extra}s` : ''), '#ffb060', 20); } });
+  def('ry_su', { el: 'fire', clip: 'magic2h3', anim: 'burst', hit: RY.su.warn, speed: 1.75, dur: RY.su.warn + RY.su.recover, cd: 1, super: true, power: 3, label: RY.su.name, noMove: true,
+    onStart(f, t) { const fw = fwdOf(f); const a = f.pos.clone().addScaledVector(fw, .6), b = f.pos.clone().addScaledVector(fw, RY.su.len); const r = Math.hypot(b.x, b.z); if (r > CFG.ARENA_R) b.multiplyScalar(CFG.ARENA_R / r); a.y = b.y = groundAt(a.x, a.z, f.pos.y + .2); f.suLine = { a, b, dir: fw.clone() }; telegraphLine(a, b, RY.su.width, 0xff5a1a, RY.su.warn); fb('fire_loop', { follow: () => f.state === 'cast' ? swordTip(f, .7) : null, size: 1.6, loop: true, life: RY.su.warn, speed: 1.6 }); },
+    fn(f, t) {
+      const L = f.suLine, cid = f.castId, n = 7;
+      for (let i = 0; i <= n; i++) later(i * .045, () => { const P = new V3().lerpVectors(L.a, L.b, i / n); fb('fire_wall', { pos: P.clone().setY(P.y + 1), size: [2.6, 2.1], mode: 'up', speed: 1.5, boost: 1.1 }); if (i % 2 === 0) { decal(P, 'scorch', 2.4); FX.fire(P.clone().setY(P.y + .4), 6, .6, _v2.set(0, 3, 0), 1.2); } });
+      fb('explosion', { pos: L.a.clone().lerp(L.b, .35).setY(L.a.y + 1.6), size: 4.5 }); Sfx.play('explode'); Sfx.play('fire'); shake(.7); flashSky();
+      const dx = L.b.x - L.a.x, dz = L.b.z - L.a.z, L2 = dx * dx + dz * dz;
+      for (const T of opps(f)) { const k = clamp(((T.pos.x - L.a.x) * dx + (T.pos.z - L.a.z) * dz) / L2, 0, 1);
+      if (!T.ghost() && Math.hypot(T.pos.x - L.a.x - dx * k, T.pos.z - L.a.z - dz * k) < RY.su.width / 2 + .4) applyHit(f, T, { dmg: RY.su.dmg, kb: 6, launch: 2, el: 'fire', from: L.a, heavy: true, skill: true, castId: cid, burn: RY.su.burnDur, unblockable: false, power3: true }); }
+    } });
+}
+// ---------------------------------------------------------------- ELEMENTAL MASTER — six elements, seals & fusions (user's sheet)
+BAL.chars.master = { hp: 1000, speedMul: 1, dashCD: 1.2, combo: [30, 35, 45], height: 1.85,
+  energy: { max: 100, regen: 8, delay: 2 }, swapGap: .5,
+  s1: { cost: 15, cd: 6 }, s2: { cost: 25, cd: 11 }, fuse: { cost: 35, cd: 14 }, spD: .1, spT: .05,
+  su: { name: 'Union of the Six', warn: 1.2, waves: [60, 70, 100], radius: 3.8 } };
+const MM = BAL.chars.master;
+const M1 = { // skill 1 per element: [name, dmg, anim, extra]
+  fire: ['Flame Spear', 75], water: ['Water Whip', 65], earth: ['Rock Fist', 85], wind: ['Air Blade', 60], ice: ['Ice Spear', 60], lightning: ['Flash Bolt', 65] };
+const M2 = { fire: ['Fire Arc', 105], water: ['Push Wave', 85], earth: ['Stone Wall', 0], wind: ['Wind Shove', 70], ice: ['Frost Grip', 75], lightning: ['Thunder Step', 85] };
+const FUSE = { // sorted pair -> [name, fn-key]
+  'fire+water': 'Steam Burst', 'earth+fire': 'Molten Rock', 'fire+wind': 'Flame Vortex', 'fire+ice': 'Thermal Shock', 'fire+lightning': 'Plasma Spear',
+  'earth+water': 'Mud Snare', 'water+wind': 'Water Cyclone', 'ice+water': 'Freezing Wave', 'lightning+water': 'Charged Pool',
+  'earth+wind': 'Pebble Storm', 'earth+ice': 'Frost-Rock Shield', 'earth+lightning': 'Shock Stake', 'ice+wind': 'Blizzard', 'lightning+wind': 'Storm Rush', 'ice+lightning': 'Charged Bind' };
+const fuseKey = (a, b) => [a, b].sort().join('+');
+function mSeal(f, el) { f.seal = { el, until: game.time + 5 }; if (f.isPlayer) popText(f.pos.clone().setY(f.pos.y + 2.5), EL[el].name.toUpperCase() + ' SEAL', '#ffe9a0', 17); }
+function buildMasterKit() {
+  const chk = (f, cost) => { if (f.mana < cost) { if (f.isPlayer) { popText(f.pos.clone().setY(f.pos.y + 2.3), 'NO ENERGY', '#8fd0ff', 18); btnDenied('m1'); } return false; } return true; };
+  // ---- skill 1 (shared slot m1)
+  def('m1', { slot: 'm1', el: 'fire', anim: 'punch', dur: .5, rel: .2, cd: MM.s1.cd, cost: MM.s1.cost, energy: true, label: null, fn(f, t) {
+    const el = f.melEl, cid = f.castId, S = (o) => Object.assign({ skill: true, castId: cid, seal: el }, o);
+    if (el === 'fire') spawnBall(f, t, S({ el, pos: frontPos(f, .9, 1.35), speed: 30, radius: .42, dmg: 75, kb: 3, vis: 'fire', life: 2 }));
+    else if (el === 'water') { waterWhip(f, t, 'R', 65, { skill: true, castId: cid, seal: 'water', slow: 1, slowPct: .15 }); }
+    else if (el === 'earth') { const p = frontPos(f, 1.1, -.4); spawnBall(f, t, S({ el, pos: p, speed: 19, radius: .6, dmg: 85, kb: 6, rise: .13, riseTo: 1.4, vis: 'rock', life: 2.4 })); FX.earth(p.clone().setY(f.pos.y + .1), 8, .5); }
+    else if (el === 'wind') spawnBall(f, t, S({ el, pos: frontPos(f, .9, 1.1), speed: 36, radius: .75, dmg: 60, kb: 4, life: .8, vis: 'wind' }));
+    else if (el === 'ice') spawnBall(f, t, S({ el: 'ice', pos: frontPos(f, .9, 1.3), speed: 30, radius: .4, dmg: 60, kb: 2, slow: 1.5, slowPct: .2, vis: 'ice_needle' }));
+    else { // lightning: warned narrow line
+      const fw = fwdOf(f); const a = frontPos(f, .8, 0); a.y = groundAt(a.x, a.z, f.pos.y + .2); const b = a.clone().addScaledVector(fw, 14); const r = Math.hypot(b.x, b.z); if (r > CFG.ARENA_R) b.multiplyScalar(CFG.ARENA_R / r);
+      telegraphLine(a, b, .8, 0xb48cff, .3);
+      later(.3, () => { if (game.state !== 'fight' && game.state !== 'ko') return; const from = a.clone().setY(a.y + 1.2), to = b.clone().setY(b.y + 1.2); boltFX(from, to, 0xd0c4ff, .12, .3, .4); fb('lightning_beam', { pos: from.clone().lerp(to, .5), size: [a.distanceTo(b), 1.4], mode: 'beam', dir: fw.clone(), speed: 2 }); Sfx.play('lightning');
+        const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz;
+        for (const T of opps(f)) { const k = clamp(((T.pos.x - a.x) * dx + (T.pos.z - a.z) * dz) / L2, 0, 1);
+        if (!T.ghost() && Math.hypot(T.pos.x - a.x - dx * k, T.pos.z - a.z - dz * k) < 1) applyHit(f, T, S({ dmg: 65, kb: 2, el: 'lightning', from: a, beam: true })); } });
+    }
+    Sfx.play(el === 'ice' ? 'water' : el);
+  } });
+  // ---- skill 2 (shared slot m2)
+  def('m2', { slot: 'm2', el: 'fire', anim: 'push', dur: .6, rel: .25, cd: MM.s2.cd, cost: MM.s2.cost, energy: true, fn(f, t) {
+    const el = f.melEl, cid = f.castId, S = (o) => Object.assign({ skill: true, castId: cid, seal: el }, o);
+    if (el === 'fire') { for (let k = 1; k <= 3; k++) fb('fire_wall', { pos: f.pos.clone().addScaledVector(fwdOf(f), k * 1.5).setY(f.pos.y + 1.1), size: [2 + k * .5, 1.6], mode: 'up', speed: 1.6, boost: 1.1 }); coneHit(f, t, 5, .75, 105, S({ kb: 3, el, heavy: true })); }
+    else if (el === 'water') { const p = spawnWave(f, t, S({ el: 'water', speed: 14, width: 3.4, height: 1.1, dmg: 85, kb: 8, launch: 0, life: 1.4, vis: 'water', push: true })); p.fbh = [fb('water_wave', { follow: () => p.dead ? null : p.pos, off: new V3(0, 1.1, 0), size: 3.2, loop: true })]; }
+    else if (el === 'earth') { spawnWall(f, t, { hp: 180, life: 3, both: true }); }
+    else if (el === 'wind') { coneHit(f, t, 6, .7, 70, S({ kb: 9, el, push: true })); fb('dust_wave', { pos: f.pos.clone().addScaledVector(fwdOf(f), 2.6).setY(f.pos.y + .7), size: [5, 2.4], mode: 'up', speed: 1.5, opacity: .8 }); f.sts.haste = 2;
+      for (let k = 1; k <= 3; k++) fb('water_vortex', { pos: f.pos.clone().addScaledVector(fwdOf(f), k * 1.6).setY(f.pos.y + 1.1), size: 1.3 + k * .4, desat: 1, tint: 0xffffff, boost: 1.3, opacity: .6, speed: 1.8 }); }
+    else if (el === 'ice') { fb('ice_spike', { pos: f.pos.clone().addScaledVector(fwdOf(f), 2.2).setY(f.pos.y + .1), size: [3.6, 3.4], mode: 'up', speed: 1.4 }); if (coneHit(f, t, 3.8, .65, 75, S({ kb: 1, el: 'ice', freeze: true }))) { } }
+    else { // thunder step: short attack dash
+      const d = _v1.copy(t.pos).sub(f.pos).setY(0).normalize(); f.startDash(d, BAL.dashSpeed * 1.1, .26, 'lightning'); f.dashAttack = { dmg: 85, el: 'lightning', hit: false, seal: 'lightning', castId: cid }; }
+    Sfx.play(el === 'ice' ? 'water' : el);
+  } });
+  // ---- fusion (slot mf) — needs a stored seal + a different current element
+  def('mfuse', { slot: 'mf', el: 'fire', anim: 'burst', dur: .7, rel: .3, cd: 14, cost: MM.fuse.cost, energy: true, power: 2, fn(f, t) {
+    const pair = f.pendingFuse; if (!pair) return; const [a, b] = pair; const key = fuseKey(a, b); const cid = f.castId, S = (o) => Object.assign({ skill: true, castId: cid }, o);
+    popText(f.pos.clone().setY(f.pos.y + 2.6), FUSE[key].toUpperCase(), '#ffe9a0', 22); Sfx.play('chain');
+    const fw = fwdOf(f);
+    switch (key) {
+      case 'fire+water': { const c = f.pos.clone().setY(f.pos.y + 1); fb('explosion', { pos: c, size: 5, opacity: .9 }); fb('water_splash', { pos: c, size: 4.5, speed: 1.6 }); FX.burst(c, 'fire', 20, 6); Sfx.play('explode'); shake(.4); if (t.pos.distanceTo(f.pos) < 4) applyHit(f, t, S({ dmg: 95, kb: 9, el: 'water', from: f.pos, heavy: true, push: true })); break; }
+      case 'earth+fire': spawnBall(f, t, S({ el: 'fire', pos: frontPos(f, 1.1, 0), speed: 13, radius: .8, dmg: 100, kb: 7, vis: 'rock', life: 3, trail: 'fire_loop', trailSize: 1.8, aoe: { r: 2.6, dmg: 40, el: 'fire' } })); break;
+      case 'fire+wind': { const p = spawnTornado(f, t, S({ el: 'fire', speed: 7, life: 2, radius: 1.6, tick: 130 / 8, tickRate: .25 })); p.fbh = [fb('tornado', { follow: () => p.dead ? null : p.pos, off: new V3(0, 2, 0), size: [3, 4.4], loop: true, mode: 'up', tint: 0xffa050, boost: 1.2 })]; break; }
+      case 'fire+ice': spawnBall(f, t, S({ el: 'ice', pos: frontPos(f, .9, 1.3), speed: 30, radius: .45, dmg: 40, kb: 2, vis: 'ice_needle', aoe: { r: 2.8, dmg: 85, el: 'fire' } })); break;
+      case 'fire+lightning': { const a = frontPos(f, .8, 0); a.y = groundAt(a.x, a.z, f.pos.y + .2); const b = a.clone().addScaledVector(fw, 16); const r0 = Math.hypot(b.x, b.z); if (r0 > CFG.ARENA_R) b.multiplyScalar(CFG.ARENA_R / r0); telegraphLine(a, b, 1, 0xffb060, .7);
+        later(.7, () => { if (game.state !== 'fight' && game.state !== 'ko') return; const from = a.clone().setY(a.y + 1.2), to = b.clone().setY(b.y + 1.2); boltFX(from, to, 0xffc080, .2, .3, .2); fb('lightning_beam', { pos: from.clone().lerp(to, .5), size: [a.distanceTo(b), 2], mode: 'beam', dir: fw.clone(), tint: 0xffb070, speed: 2, boost: 1.3 }); fb('fire_burst', { pos: to, size: 2.5 }); Sfx.play('lightning'); Sfx.play('fire');
+          const dx = b.x - a.x, dz = b.z - a.z, L2 = dx * dx + dz * dz; const k = clamp(((t.pos.x - a.x) * dx + (t.pos.z - a.z) * dz) / L2, 0, 1); if (!t.ghost() && Math.hypot(t.pos.x - a.x - dx * k, t.pos.z - a.z - dz * k) < 1.2) applyHit(f, t, S({ dmg: 135, kb: 5, el: 'fire', from: a, beam: true, heavy: true })); }); break; }
+      case 'earth+water': { const c = aimPoint(f, t, .25); const z = addLava(f, { kind: 'circle', c, r: 2.6, dur: 3, dps: 0 }); z.slowPct = .25; z.mud = true; fb('dust_puff', { pos: c.clone().setY(c.y + .4), size: 3.4, opacity: .9, tint: 0x6a5134, speed: 1.4 }); if (!t.ghost() && Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < 2.6) applyHit(f, t, S({ dmg: 70, kb: 1, el: 'earth', from: c })); break; }
+      case 'water+wind': { const p = spawnTornado(f, t, S({ el: 'water', speed: 6.5, life: 2.2, radius: 1.8, tick: 100 / 8, tickRate: .27, pull: 3 })); p.fbh = [fb('tornado', { follow: () => p.dead ? null : p.pos, off: new V3(0, 2, 0), size: [3.2, 4.6], loop: true, mode: 'up', tint: 0x9fd4ff }), fb('water_vortex', { follow: () => p.dead ? null : p.pos, off: new V3(0, .15, 0), size: 3.6, mode: 'flat', loop: true, opacity: .7 })]; break; }
+      case 'ice+water': { const p = spawnWave(f, t, S({ el: 'ice', speed: 12, width: 4.5, height: 1.1, dmg: 90, kb: 2, launch: 0, life: 1.6, vis: 'water', freeze: true })); p.fbh = [fb('water_wave', { follow: () => p.dead ? null : p.pos, off: new V3(0, 1.1, 0), size: 4, loop: true, tint: 0xbfe9ff })]; break; }
+      case 'lightning+water': { const c = aimPoint(f, t, .25); const z = addLava(f, { kind: 'circle', c, r: 2.6, dur: 3, dps: 35 }); z.zap = true; fb('water_vortex', { pos: c.clone().setY(c.y + .12), size: 5, mode: 'flat', loop: true, life: 3, opacity: .8 }); break; }
+      case 'earth+wind': { for (let i = 0; i < 8; i++) later(i * .12, () => { if (f.state === 'ko') return; spawnBall(f, t, { el: 'earth', pos: frontPos(f, .8, 1.3), speed: 32, radius: .3, dmg: 15, kb: 1.5, spread: rand(-.12, .12), vis: 'pebble', life: 1.2, skill: true, castId: cid, multi: true }); }); fb('dust_wave', { pos: f.pos.clone().addScaledVector(fw, 3).setY(f.pos.y + .8), size: [6, 3], mode: 'up', speed: 1.4, opacity: .85 }); break; }
+      case 'earth+ice': { f.shieldHp = 120; f.shieldT = 4; fb('ice_spike', { follow: () => f.shieldHp > 0 ? f.pos.clone().setY(f.pos.y + .1) : null, size: [3, 2.8], mode: 'up', loop: true, life: 4, opacity: .9 }); fb('rocks_float', { follow: () => f.shieldHp > 0 ? f.pos.clone().setY(f.pos.y + 1.2) : null, size: 2.4, loop: true, life: 4, opacity: .9 }); popText(f.pos.clone().setY(f.pos.y + 2.5), 'SHIELD 120', '#bfe9ff', 20); break; }
+      case 'earth+lightning': { const P = aimPoint(f, t, .3); telegraph(P, 1.6, 0xd0c4ff, .9); later(.9, () => { if (game.state !== 'fight' && game.state !== 'ko') return; fb('ice_spike', { pos: P.clone().setY(P.y + .1), size: [2.6, 3], mode: 'up', tint: 0xcaa96a, speed: 1.6 }); boltFX(P.clone().setY(P.y + 8), P, 0xd0c4ff, .25, .3, 1); fb('bolt_branch', { pos: P.clone().setY(P.y + 2.6), size: [3, 5], mode: 'up', speed: 1.8 }); FX.earth(P.clone().setY(P.y + .3), 14, 1.2); Sfx.play('thunder'); Sfx.play('earth'); shake(.5); if (!t.ghost() && Math.hypot(t.pos.x - P.x, t.pos.z - P.z) < 1.9 && t.pos.y - P.y < 2.4) applyHit(f, t, S({ dmg: 125, kb: 2, launch: 7, el: 'lightning', from: P, heavy: true })); }); break; }
+      case 'ice+wind': { const ticks = 7; for (let i = 0; i < ticks; i++) later(.15 + i * 2 / ticks, () => { if (game.state !== 'fight' && game.state !== 'ko') return; for (const o of [-1, 0, 1]) fb('ice_burst', { pos: f.pos.clone().addScaledVector(fwdOf(f), 2 + i * .5).add(_v2.set(Math.cos(f.yaw) * o * 1.2, 1 + rand(0, .8), -Math.sin(f.yaw) * o * 1.2)), size: 1.5, speed: 2.4, opacity: .8 }); coneHit(f, t, 6.5, .6, 90 / ticks, S({ el: 'ice', multi: true, noStagger: true, slow: 2, slowPct: .25 })); }); fb('dust_wave', { pos: f.pos.clone().addScaledVector(fw, 3).setY(f.pos.y + 1), size: [6, 3], mode: 'up', tint: 0xcfe9ff, opacity: .8, speed: 1.3, life: 2 }); break; }
+      case 'lightning+wind': { const d = _v1.copy(t.pos).sub(f.pos).setY(0).normalize(); f.startDash(d, BAL.dashSpeed * 1.25, .3, 'lightning'); f.dashAttack = { dmg: 110, el: 'lightning', hit: false, castId: cid }; break; }
+      case 'ice+lightning': spawnBall(f, t, S({ el: 'ice', pos: frontPos(f, .9, 1.3), speed: 38, radius: .45, dmg: 85, kb: 1, vis: 'ice_needle', root: .7, trail: 'lightning_orb', trailSize: .9 })); break;
+    }
+    f.pendingFuse = null; f.seal = null;
+  } });
+  // ---- super
+  def('m_su', { el: 'wind', anim: 'ult', clip: null, dur: MM.su.warn + 1.3, rel: MM.su.warn, cd: 1, super: true, power: 3, label: MM.su.name, noMove: true,
+    onStart(f, t) { f.suP = aimPoint(f, t, .3); telegraph(f.suP, MM.su.radius, 0xffe9a0, MM.su.warn); },
+    fn(f, t) { const P = f.suP, cid = f.castId, R = MM.su.radius;
+      const stage = (i, fx) => later(i * .5, () => { if (game.state !== 'fight' && game.state !== 'ko') return; fx(); Sfx.play(i === 2 ? 'explode' : i === 1 ? 'wind' : 'earth'); shake(.4 + i * .2); for (const T of opps(f)) if (!T.ghost() && Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < R && T.pos.y - P.y < 3) applyHit(f, T, { dmg: MM.su.waves[i], kb: i === 2 ? 9 : 2, el: ['earth', 'ice', 'fire'][i], from: P, heavy: i === 2, skill: true, castId: cid, multi: i < 2, push: i === 2 }); });
+      stage(0, () => { fb('rock_burst', { pos: P.clone().setY(P.y + .8), size: 4.5 }); fb('water_wave', { pos: P.clone().setY(P.y + 1), size: 4 }); fb('dust_puff', { pos: P.clone().setY(P.y + .3), size: 3.5, opacity: .8 }); });
+      stage(1, () => { fb('ice_spike', { pos: P.clone().setY(P.y + .1), size: [4.5, 4.2], mode: 'up', speed: 1.5 }); fb('dust_wave', { pos: P.clone().setY(P.y + .9), size: [6, 3], mode: 'up', tint: 0xcfe9ff, speed: 1.4 }); });
+      stage(2, () => { fb('explosion', { pos: P.clone().setY(P.y + 2.2), size: 7.5 }); fb('bolt_branch', { pos: P.clone().setY(P.y + 3), size: [4, 7], mode: 'up', speed: 1.7, boost: 1.3 }); fb('fire_ring', { pos: P.clone().setY(P.y + .12), size: 8 }); flashSky(); });
+    } });
+}
+buildKits(); buildKazanKit(); buildRakanKit(); buildBasics(); buildSiraKit(); buildRaynKit(); buildMasterKit();
 // ---------------------------------------------------------------- HIT RESOLUTION
 function applyHit(att, tgt, h) {
   if (tgt.invuln > 0 || tgt.state === 'ko' || (game.state !== 'fight' && game.state !== 'ko')) return 'miss';
@@ -1765,16 +1963,33 @@ function applyHit(att, tgt, h) {
   if (tgt.sts.soak > 0) dmg *= 1 + BAL.el.water.perk.pct;
   dmg *= 1 - charDR(tgt); // highest reduction only, never stacked
   dmg = Math.max(1, Math.round(dmg));
+  if (tgt.shieldHp > 0) { // frost-rock shield absorbs before health
+    const ab = Math.min(tgt.shieldHp, dmg); tgt.shieldHp -= ab; dmg -= ab;
+    FX.ice(hitPos, 8, .5); popText(hitPos, 'ABSORB', '#bfe9ff', 16);
+    if (tgt.shieldHp <= 0) { fb('ice_burst', { pos: tgt.pos.clone().setY(tgt.pos.y + 1), size: 2.6, speed: 2 }); Sfx.play('clash'); }
+    if (dmg <= 0) return 'absorb';
+  }
   const real = Math.min(dmg, Math.max(0, tgt.hp)); tgt.hp -= dmg; tgt.lastHit = game.time; if (tgt.isDummy) tgt.hp = Math.max(1, tgt.hp);
-  if (att === hero) { game.stats.dealt += real; game.stats.comboDmg = (game.time - (game.stats.lastHitT || -9) < 1.4 ? game.stats.comboDmg : 0) + dmg; game.stats.lastHitT = game.time; } else game.stats.taken += real;
+  if (att === hero) { game.stats.dealt += real; game.stats.comboDmg = (game.time - (game.stats.lastHitT || -9) < 1.4 ? game.stats.comboDmg : 0) + dmg; game.stats.lastHitT = game.time; } else if (tgt === hero) game.stats.taken += real;
   const inCombo = (tgt.state === 'hit' || tgt.state === 'down' || !tgt.onGround) && game.time - att.lastComboHit < 1.1;
   att.combo = inCombo ? att.combo + 1 : 1; att.lastComboHit = game.time;
   if (att === hero) { showCombo(att.combo); game.stats.maxCombo = Math.max(game.stats.maxCombo, att.combo); }
-  att.spirit = Math.min(100, att.spirit + dmg * BAL.superPerDealt); tgt.spirit = Math.min(100, tgt.spirit + dmg * BAL.superPerTaken);
+  att.spirit = Math.min(100, att.spirit + dmg * (att.spD ?? BAL.superPerDealt)); tgt.spirit = Math.min(100, tgt.spirit + dmg * (tgt.spT ?? BAL.superPerTaken));
   perkOnHit(att, tgt, h, dmg);
-  if (h.burn) tgt.burnT = Math.max(tgt.burnT, h.burn);
+  if (att.charId === 'sira' && h.skill && h.el === 'water' && att.wetCast !== h.castId) { att.wetCast = h.castId; siraMark(att, tgt); }
+  if (h.burn) { tgt.burnT = Math.max(tgt.burnT, h.burn); tgt.burnDps = att.charId === 'rayn' || h.power3 ? 5 : 2.2; }
   if (h.slow) { tgt.slowT = Math.max(tgt.slowT, h.slow); tgt.slowPct = h.slowPct || .3; }
-  if (h.stun) tgt.shockT = Math.max(tgt.shockT || 0, h.stun);
+  let stunT = h.stun || 0;
+  const ccFree = tgt.sts.ccImm <= 0;
+  if (h.needle) { // Sira: freezes a Wet enemy, otherwise slows
+    if (tgt.sts.wet > 0 && ccFree) { tgt.sts.wet = 0; stunT = Math.max(stunT, SR.s2.freeze); tgt.sts.ccImm = 2 + SR.s2.freeze; fb('ice_spike', { pos: tgt.pos.clone().setY(tgt.pos.y + .1), size: [2, 2.2], mode: 'up', speed: 1.6 }); popText(hitPos.clone().setY(hitPos.y + .8), 'FROZEN!', '#bfe9ff', 24); Sfx.play('clash'); }
+    else { if (tgt.sts.wet > 0) tgt.sts.wet = 0; tgt.slowT = Math.max(tgt.slowT, SR.s2.slowDur); tgt.slowPct = SR.s2.slow; }
+  }
+  if (h.freeze && ccFree) { stunT = Math.max(stunT, .7); tgt.sts.ccImm = 2.7; fb('ice_spike', { pos: tgt.pos.clone().setY(tgt.pos.y + .1), size: [2, 2.2], mode: 'up', speed: 1.6 }); popText(hitPos.clone().setY(hitPos.y + .8), 'FROZEN!', '#bfe9ff', 22); }
+  if (h.root && ccFree) { tgt.sts.root = h.root; tgt.sts.ccImm = 2 + h.root; popText(hitPos.clone().setY(hitPos.y + .8), 'BOUND!', '#d8ccff', 20); for (let i = 0; i < 4; i++) boltFX(tgt.pos.clone().setY(tgt.pos.y + .2), tgt.pos.clone().setY(tgt.pos.y + 1.6).add(_v3.randomDirection().multiplyScalar(.5)), 0xd0c4ff, .05, .3); }
+  if (stunT) tgt.shockT = Math.max(tgt.shockT || 0, stunT), h.stun = stunT;
+  if (h.seal && att.charId === 'master' && h.castId && att.sealCast !== h.castId) { att.sealCast = h.castId; mSeal(att, h.seal); att.pendingFuse = att.seal && att.seal.el !== att.melEl ? [att.seal.el, att.melEl] : null; }
+  if (h.wet && att.charId === 'sira') siraMark(att, tgt);
   FX.sparks(hitPos, EL[h.el || 'fire'].c, h.heavy ? 22 : 12, h.heavy ? 9 : 6); if (h.heavy) FX.shock(hitPos, h.el || 'fire', 1);
   if (!h.proj && !h.multi) impactFX(h.el || 'fire', hitPos, h.heavy, .8);
   popDamage(hitPos, dmg, h.el); Sfx.play(h.heavy ? 'heavy' : 'hit');
@@ -1832,6 +2047,29 @@ function loadCharGLB(id, onP = () => { }) {
   return L.p;
 }
 const loadRavenGLB = onP => loadCharGLB('raven', onP);
+const SWORDS = {}, SWORD_FOR = { sira: 'ice', rayn: 'fire' };
+function loadSword(kind) { if (SWORDS[kind]) return Promise.resolve(); return new Promise(res => newGLTF().load(`assets/sword_${kind}.glb`, g => {
+  g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+  const box = new THREE.Box3().setFromObject(g.scene), size = box.getSize(new V3()), c = box.getCenter(new V3());
+  const k = 2 / Math.max(1e-6, size.y); // bake to a -1..1 blade along +Y whatever the file's node scales are
+  const w = new THREE.Group(); g.scene.scale.multiplyScalar(k); g.scene.position.set(-c.x * k, -c.y * k, -c.z * k); w.add(g.scene);
+  SWORDS[kind] = w; res();
+}, undefined, () => res())); }
+const SWORD_FIT = { ice: { pos: [0, .03, .01], rot: [180, 0, 0], len: 1.08, flip: 1, grip: .12 }, fire: { pos: [0, .03, .01], rot: [180, 0, 0], len: 1.32, flip: 1, grip: .1 } };
+function attachSword(R, id) {
+  const kind = SWORD_FOR[id]; if (!kind) return;
+  const put = () => { const b = R.glb.b.RightHand; if (!b || R.glb.sword) return;
+    R.model ? 0 : 0; R.root.updateMatrixWorld(true);
+    const F = SWORD_FIT[kind], ws = b.getWorldScale(new V3()).x || 1;
+    const holder = new THREE.Group(); const g = SWORDS[kind].clone(true);
+    if (F.flip) g.rotation.z = Math.PI; // some models come grip-up: turn them so the handle sits in the hand
+    g.position.y = 1 - (F.grip || 0) * 2; // sink the hand onto the handle instead of the pommel tip
+    holder.add(g);
+    holder.scale.setScalar(F.len / 2 / Math.max(1e-6, ws));
+    holder.position.set(...F.pos); holder.rotation.set(F.rot[0] * Math.PI / 180, F.rot[1] * Math.PI / 180, F.rot[2] * Math.PI / 180);
+    b.add(holder); R.glb.sword = holder; };
+  if (SWORDS[kind]) put(); else loadSword(kind).then(put);
+}
 const gmeta = G => CHAR_META[G.id] || {};
 const BONES = ['Hips', 'Spine', 'Neck', 'HeadTop_End', 'LeftArm', 'LeftForeArm', 'LeftHand', 'RightArm', 'RightForeArm', 'RightHand', 'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot'];
 function attachRavenGLB(R, el, variant, id = 'raven') {
@@ -1848,6 +2086,7 @@ function attachRavenGLB(R, el, variant, id = 'raven') {
   for (const [n, c] of Object.entries(SRC.clips)) { const a = mixer.clipAction(c); if (['jump_up', 'land', 'hard_land', 'roll', 'run_stop'].includes(n)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; } actions[n] = a; }
   R.bodyMeshes.forEach(m => m.visible = false);
   R.glb = { model, holder, mixer, actions, b, cur: null, retW: 0, id };
+  attachSword(R, id);
   playClip(R.glb, 'idle', 0);
 }
 function playClip(G, name, fade = .18) {
@@ -1879,7 +2118,7 @@ function animateGLB(f, dt, lz, lx, hs) {
   let clip = G.cur, ret = true, drove = false;
   if (f.emote && st === 'idle') drove = playAttack(G, f.emote.clip, 0, 1, 'e' + f.emote.id);
   else if (st === 'cast' && f.cast && f.cast.a.clip) { const a = f.cast.a; drove = playAttack(G, a.clip, impactStart(G, a.clip, a.rel, a.speed || 1), a.speed || 1, 'c' + f.castId); }
-  else if (st === 'melee' && f.melee) { const md = (MELEE_OV[f.charId] || {})[f.melee.i] || MELEE[f.melee.i]; drove = playAttack(G, md.clip, impactStart(G, md.clip, md.hit, md.speed), md.speed, 'm' + f.castId); }
+  else if (st === 'melee' && f.melee) { const md = (MELEE_OV[f.charId] || {})[f.melee.i] || MELEE[f.melee.i]; drove = playAttack(G, md.clip, impactStart(G, md.clip, md.hit, md.speed * (f.comboSpd || 1)), md.speed * (f.comboSpd || 1), 'm' + f.castId); }
   else if (st === 'hit') drove = playAttack(G, f.stun > .6 ? 'stunned' : 'hit', f.stun > .6 ? 0 : .05, f.stun > .6 ? 1.2 : 1.7, 'h' + f.hitId);
   else if (st === 'down' || st === 'ko') drove = playAttack(G, 'dying', 0, st === 'ko' ? 1.05 : 1.7, 'd' + f.downId);
   else if (st === 'getup') drove = playAttack(G, 'getup', .35, 2.6, 'g' + f.downId);
@@ -1957,7 +2196,7 @@ class Fighter {
   }
   blankIntent() { return { mx: 0, mz: 0, jump: false, jumpHeld: false, dash: false, melee: false, block: false, elems: [], ult: false, ability: null }; }
   reset(p) {
-    this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = this.maxHp || BAL.hp; this.dispHp = 100; this.heat = 0; this.heatT = 0; this.lavaAcc = 0; this.trailHp = 100; this.sts = { soak: 0, fort: 0, haste: 0, static: 0, stab: 0, ccImm: 0 }; this.icd = {}; this.mchain = 0; this.mchainT = -9; this.slowPct = .3; this.bufAb = null; this.castId = 0; this.hitId = 0; this.downId = 0; this.mana = CFG.MANA_MAX;
+    this.pos.copy(p); this.vel.set(0, 0, 0); this.hp = this.maxHp || BAL.hp; this.dispHp = 100; this.heat = 0; this.heatT = 0; this.lavaAcc = 0; this.trailHp = 100; this.sts = { soak: 0, fort: 0, haste: 0, static: 0, stab: 0, wet: 0, root: 0, ccImm: 0 }; this.embers = 0; this.emberT = 0; this.igniteT = 0; this.shieldHp = 0; this.shieldT = 0; this.seal = null; this.pendingFuse = null; this.swapCd = 0; this.dashAttack = null; this.lastUse = -9; this.icd = {}; this.mchain = 0; this.mchainT = -9; this.slowPct = .3; this.bufAb = null; this.castId = 0; this.hitId = 0; this.downId = 0; this.mana = CFG.MANA_MAX;
     this.state = 'idle'; this.st = 0; this.onGround = true; this.airJumps = this.maxAirJumps; this.airDash = 1; this.dashCD = 0;
     this.invuln = 0; this.stun = 0; this.combo = 0; this.lastComboHit = -9; this.burnT = 0; this.slowT = 0; this.blockFlash = 0; this.lastHit = -9;
     this.cast = null; this.melee = null; this.walkPh = 0; this.freezeT = 0; this.lastEl = 'fire'; this.dashFx = null; this.dashHit = false; this.landT = 0;
@@ -1978,13 +2217,17 @@ class Fighter {
   canCast() { return ['idle', 'air', 'block'].includes(this.state); }
   useAbility(name, opp, force = false) {
     const a = AB[name]; if (!a) return false;
-    if ((this.cds[name] || 0) > 0) return false;
+    const cdKey = a.slot || name;
+    if ((this.cds[cdKey] || 0) > 0) return false;
+    if (this.seal) this.pendingFuse = this.seal.el !== this.melEl ? [this.seal.el, this.melEl] : this.pendingFuse;
+    if (name === 'mfuse' && (!this.pendingFuse || !this.seal || game.time > this.seal.until)) { if (this.isPlayer) btnDenied('mfuse'); return false; }
     if (!this.canCast() && !(force && this.state === 'cast' && this.cast && this.cast.fired)) return false;
-    if (!CFG.UNLIMITED_MANA && this.mana < a.cost) { popText(this.pos.clone().setY(this.pos.y + 2.2), 'Not enough mana', '#8fd0ff', 18); return false; }
+    if ((this.useEnergy ? a.cost && this.mana < a.cost : !CFG.UNLIMITED_MANA && this.mana < a.cost)) { if (this.useEnergy) btnDenied(name); popText(this.pos.clone().setY(this.pos.y + 2.2), 'Not enough mana', '#8fd0ff', 18); return false; }
     if ((a.ult || a.super) && this.spirit < 100) return false;
     if (a.ult || a.super) this.spirit = 0;
-    if (!CFG.UNLIMITED_MANA) this.mana -= a.cost;
-    this.cds[name] = a.cd; this.cast = { a, t: 0, fired: false }; this.setState('cast'); this.rig.shield.visible = false; this.castId = ++CAST_ID; this.bufAb = null;
+    if (!CFG.UNLIMITED_MANA || this.useEnergy) this.mana -= a.cost || 0;
+    if (this.useEnergy) this.lastUse = game.time;
+    this.cds[cdKey] = a.cd; this.cast = { a, t: 0, fired: false }; this.setState('cast'); this.rig.shield.visible = false; this.castId = ++CAST_ID; this.bufAb = null;
     this.lastEl = a.el || this.lastEl;
     if (a.onStart) a.onStart(this, opp);
     if (a.el && a.rel > .22) chargeFX(this, a.el, a.rel);
@@ -2024,13 +2267,19 @@ class Fighter {
     for (const k in this.sts) if (this.sts[k] > 0) this.sts[k] = Math.max(0, this.sts[k] - dt);
     for (const k in this.icd) this.icd[k] -= dt;
     if (this.heat > 0) { this.heatT -= dt; if (this.heatT <= 0) this.heat = 0; }
+    if (this.embers > 0) { this.emberT -= dt; if (this.emberT <= 0) this.embers = 0; }
+    if (this.igniteT > 0) { this.igniteT -= dt; if (!this.ignFb || this.ignFb.dead) this.ignFb = fb('fire_loop', { follow: () => this.igniteT > 0 && this.state !== 'ko' ? swordTip(this, .7) : null, size: 1.25, loop: true, opacity: .95, speed: 1.5 }); if (Math.random() < .3) FX.fire(swordTip(this, rand(.3, .9)), 1, .05, null, .7); }
+    if (this.shieldT > 0) { this.shieldT -= dt; if (this.shieldT <= 0) this.shieldHp = 0; }
+    if (this.seal && game.time > this.seal.until) { this.seal = null; this.pendingFuse = null; }
+    this.swapCd -= dt;
+    if (this.useEnergy) this.mana = Math.min(MM.energy.max, this.mana + (game.time - this.lastUse > MM.energy.delay ? MM.energy.regen * dt : 0));
     if (this.sts.haste > 0 && Math.random() < .3) FX.wind(this.pos.clone().setY(this.pos.y + rand(.2, 1)), 1, .3, null, .6);
     if (this.sts.soak > 0 && Math.random() < .25) FX.water(this.pos.clone().setY(this.pos.y + rand(.4, 1.8)), 1, .3, _v3.set(0, -1.5, 0), .6);
     if (this.sts.static > 0 && Math.random() < .2) { const c = this.pos.clone().setY(this.pos.y + rand(.4, 1.7)); boltFX(c, c.clone().add(_v3.randomDirection().multiplyScalar(.5)), 0xd0c4ff, .025, .07); }
     this.dashCD -= dt; this.invuln = Math.max(0, this.invuln - dt); this.blockFlash -= dt; this.chainT -= dt; this.landT -= dt;
     if (this.bufT > 0) { this.bufT -= dt; if (this.bufT <= 0) { this.bufEl = null; this.bufAb = null; } }
     this.mana = CFG.UNLIMITED_MANA ? CFG.MANA_MAX : Math.min(CFG.MANA_MAX, this.mana + CFG.MANA_REGEN * dt);
-    if (this.burnT > 0) { this.burnT -= dt; if (this.hp > 1 && this.state !== 'ko') this.hp -= 2.2 * dt; FX.fire(this.pos.clone().setY(this.pos.y + rand(.3, 1.6)), 1, .3); }
+    if (this.burnT > 0) { this.burnT -= dt; if (this.hp > 1 && this.state !== 'ko') this.hp -= (this.burnDps || 2.2) * dt; FX.fire(this.pos.clone().setY(this.pos.y + rand(.3, 1.6)), 1, .3); }
     if (this.slowT > 0) { this.slowT -= dt; if (Math.random() < .3) PADD.emit(this.pos.x + rand(-.3, .3), this.pos.y + rand(.2, 1.6), this.pos.z + rand(-.3, .3), 0, -.3, 0, .6, 1, 1.6, .18, .5, 0, 0, .05, .7); }
     if (this.heal && game.time - this.lastHit > 3 && this.hp < this.maxHp && this.hp > 0) { this.hp = Math.min(this.maxHp, this.hp + this.heal * dt); if (Math.random() < .15) FX.water(this.pos.clone().setY(this.pos.y + 1), 1, .4, _v1.set(0, 1.5, 0), .6); }
     const slow = this.slowT > 0 ? 1 - this.slowPct : 1, haste = this.sts.haste > 0 ? 1 + BAL.el.wind.perk.pct : 1;
@@ -2049,13 +2298,16 @@ class Fighter {
           if (this.onGround) { this.vel.y = 10.8; this.onGround = false; this.setState('air'); Sfx.play('jump'); FX.earth(this.pos.clone().setY(this.pos.y + .1), 4, .3, null, .6); }
           else if (this.airJumps > 0) { this.airJumps--; this.vel.y = 9.8; Sfx.play('jump'); FX.wind(this.pos.clone().setY(this.pos.y + .2), 12, .5, _v2.set(0, -3, 0), 1.2); FX.shock(this.pos.clone().setY(this.pos.y + .1), 'wind', .8); }
         }
-        if (I.dash && this.dashCD <= 0 && (this.onGround || this.airDash > 0)) {
+        if (this.sts.root > 0) { I.dash = false; this.vel.x = damp(this.vel.x, 0, 20, dt); this.vel.z = damp(this.vel.z, 0, 20, dt); if (Math.random() < .3) boltFX(this.pos.clone().setY(this.pos.y + .15), this.pos.clone().setY(this.pos.y + rand(.5, 1.5)).add(_v3.randomDirection().multiplyScalar(.4)), 0xd0c4ff, .04, .12); }
+        if (I.dash && this.dashCD <= 0 && !(this.sts.root > 0) && (this.onGround || this.airDash > 0)) {
           if (!this.onGround) this.airDash--;
           const d = new V3(mvx, 0, mvz); if (d.lengthSq() < .05) d.copy(toOpp).normalize().multiplyScalar(-1); else d.normalize();
           this.startDash(d, BAL.dashSpeed * this.dashMul, BAL.dashTime); break;
         }
         if (I.melee) { this.startMelee(0); break; }
-        if (I.ult) { this.useAbility(this.isMaster ? 'avatar' : this.kit.superAb, opp); break; }
+        if (I.ult) { this.useAbility(this.kit.superAb, opp); break; }
+        if (I.ability === 'mswap') { I.ability = null; if (this.swapCd <= 0) this.setElement6(ELS6[(ELS6.indexOf(this.melEl) + 1) % 6]); }
+        if (I.ability && I.ability.startsWith && I.ability.startsWith('msel:')) { const e = I.ability.slice(5); I.ability = null; if (this.swapCd <= 0 && e !== this.melEl) this.setElement6(e); }
         if (!I.ability && this.bufAb && this.bufT > 0) I.ability = this.bufAb;
         if (I.ability) { if (isBasic(this, I.ability)) this.pressElement(I.ability, opp); else if (!this.useAbility(I.ability, opp) && this.isPlayer && (this.cds[I.ability] || 0) > 0) btnDenied(I.ability); I.ability = null; this.bufAb = null; }
         if (!this.onGround && this.canGlide && I.jumpHeld && this.vel.y < 0) { this.vel.y = Math.max(this.vel.y, -2.2); if (Math.random() < .5) FX.wind(this.pos.clone(), 1, .5, _v2.set(0, -2, 0), .8); }
@@ -2063,22 +2315,26 @@ class Fighter {
       }
       case 'dash': {
         FX.el(this.dashFx, this.pos.clone().setY(this.pos.y + rand(.3, 1.4)), this.dashFx === 'fire' ? 4 : 3, .3, null, 1);
-        if (this.dashFx === 'fire' && !this.dashHit && this.pos.distanceTo(opp.pos) < 1.3) { this.dashHit = true; applyHit(this, opp, { melee: true, dmg: 9, kb: 6, launch: 4, burn: 1.5, el: 'fire', from: this.pos, heavy: true }); }
-        if (this.st > this.dashDur) { this.vel.x *= .25; this.vel.z *= .25; this.setState(this.onGround ? 'idle' : 'air'); }
+        const DA = this.dashAttack;
+        if (DA && !DA.hit && this.pos.distanceTo(opp.pos) < 1.6) { DA.hit = true; const r = applyHit(this, opp, { melee: false, skill: true, castId: DA.castId || this.castId, dmg: DA.dmg, kb: 4, el: DA.el, from: this.pos.clone(), heavy: true, seal: DA.seal, wet: DA.wet }); if (r === 'hit') { fb(DA.el === 'lightning' ? 'bolt_branch' : 'water_splash', { pos: opp.pos.clone().setY(opp.pos.y + 1.1), size: 2.2, speed: 2 }); } }
+        if (this.st > this.dashDur) { this.vel.x *= .25; this.vel.z *= .25; this.dashAttack = null; this.setState(this.onGround ? 'idle' : 'air'); }
         break;
       }
       case 'melee': {
         const m = this.melee, md = (MELEE_OV[this.charId] || {})[m.i] || MELEE[m.i];
         if (I.melee && this.st > .1) m.queued = true;
-        if (!m.done && this.st >= md.hit) {
+        const spdM = this.comboSpd || 1;
+        if (!m.done && this.st >= md.hit / spdM) {
           m.done = true; Sfx.play('swing'); if (this.charId === 'rakan') { FX.earth(handPos(this, m.i === 0 ? 'L' : 'R'), 6, .25, null, .8); if (m.i === 2) Sfx.play('earth'); }
           const fwd = _v2.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)); this.vel.addScaledVector(fwd, 3.5);
           const tp = _v3.copy(opp.pos).sub(this.pos); const dy = Math.abs(tp.y); tp.y = 0; const d = tp.length();
           if (d < md.reach && dy < 1.4 && fwd.dot(tp.normalize()) > .3 && !opp.ghost()) {
             const el = this.isMaster ? this.lastEl : this.el;
             const chainOk = m.i > 0 && game.time - this.mchainT < BAL.comboReset;
-            const molten = !!m.molten; const r = applyHit(this, opp, { melee: true, dmg: (this.comboDmg || BAL.combo)[m.i] + (molten ? KZ.heat.bonus : 0), push: m.i === 2 && this.charId === 'rakan', kb: md.kb + (molten ? 3 : 0), launch: md.launch, slow: molten ? KZ.heat.slowDur : 0, slowPct: KZ.heat.slow, el, from: this.pos, heavy: md.heavy, castId: this.castId, third: m.i === 2 && chainOk && this.mchain >= 2 });
+            const molten = !!m.molten; const ign = this.charId === 'rayn' && this.igniteT > 0; const r = applyHit(this, opp, { melee: true, burn: ign && m.i === 2 ? RY.s2.burnDur : 0, dmg: (this.comboDmg || BAL.combo)[m.i] + (molten ? KZ.heat.bonus : 0) + (ign ? RY.s2.meleeBonus : 0), push: m.i === 2 && this.charId === 'rakan', kb: md.kb + (molten ? 3 : 0), launch: md.launch, slow: molten ? KZ.heat.slowDur : 0, slowPct: KZ.heat.slow, el, from: this.pos, heavy: md.heavy, castId: this.castId, third: m.i === 2 && chainOk && this.mchain >= 2 });
             if (molten && r === 'hit') { kazanFx(opp.pos.clone(), false); popText(opp.pos.clone().setY(opp.pos.y + 2.4), 'MOLTEN!', '#ff8a3a', 24); }
+            if (this.charId === 'rayn' && r === 'hit' && m.i === 2 && (this.embers || 0) < RY.ember.max) { this.embers = (this.embers || 0) + 1; this.emberT = RY.ember.dur; popText(this.pos.clone().setY(this.pos.y + 2.5), 'EMBER ' + this.embers, '#ffb060', 17); }
+            if (this.charId === 'sira' && r === 'hit' && m.i === 2 && opp.sts.wet > 0) { opp.sts.wet = 0; opp.slowT = Math.max(opp.slowT, 1.5); opp.slowPct = .2; fb('water_splash', { pos: opp.pos.clone().setY(opp.pos.y + 1), size: 2.2, speed: 2 }); popText(opp.pos.clone().setY(opp.pos.y + 2.3), 'CHILLED', '#bfe9ff', 18); }
             if (this.charId === 'rakan' && m.i === 2 && r === 'hit' && (this.icd.stab || 0) <= 0) { this.sts.stab = RK.stab.dur; this.icd.stab = RK.stab.icd; gravityRing(this, false); popText(this.pos.clone().setY(this.pos.y + 2.6), 'STABILITY', '#e8c890', 20); }
             if (r === 'hit') { this.mchain = chainOk ? this.mchain + 1 : 1; this.mchainT = game.time; } else if (r !== 'miss') this.mchain = 0;
             FX.el(el, handPos(this, m.i === 2 ? 'R' : m.i === 0 ? 'L' : 'R'), 10, .25, null, .9);
@@ -2087,7 +2343,7 @@ class Fighter {
         // lunge toward opponent if a bit far (makes melee usable on phones)
         if (this.st < md.hit && distOpp > 1.2 && distOpp < 3.2) { this.vel.x = damp(this.vel.x, toOpp.x / distOpp * 7, 10, dt); this.vel.z = damp(this.vel.z, toOpp.z / distOpp * 7, 10, dt); }
         else { this.vel.x = damp(this.vel.x, 0, 8, dt); this.vel.z = damp(this.vel.z, 0, 8, dt); }
-        if (this.st >= md.dur) { if (m.queued && m.i < 2) this.startMelee(m.i + 1); else this.setState(this.onGround ? 'idle' : 'air'); }
+        if (this.st >= md.dur / spdM) { if (m.queued && m.i < 2) this.startMelee(m.i + 1); else this.setState(this.onGround ? 'idle' : 'air'); }
         break;
       }
       case 'cast': {
@@ -2145,6 +2401,11 @@ class Fighter {
     const R = this.rig; R.root.position.copy(this.pos); R.root.rotation.y = this.yaw; this.dummyMesh.userData.body.rotation.x = -this.wob * .12;
   }
   animate(dt, opp) { if (this.isDummy) return; return this.animate2(dt, opp); }
+  setElement6(e) {
+    this.melEl = e; this.swapCd = MM.swapGap; this.lastEl = e === 'ice' ? 'water' : e;
+    this.pendingFuse = this.seal && this.seal.el !== e && game.time < this.seal.until ? [this.seal.el, e] : null;
+    FX.burst(this.pos.clone().setY(this.pos.y + 1), e === 'ice' ? 'water' : e, 14, 3, .9); Sfx.play('select'); if (this.isPlayer) popText(this.pos.clone().setY(this.pos.y + 2.4), EL[e].name.toUpperCase(), '#' + new THREE.Color(EL[e].color).getHexString(), 19);
+  }
   startMelee(i) { if (i === 0 && game.time - this.mchainT > BAL.comboReset) this.mchain = 0; this.melee = { i, done: false, queued: false };
     if (i === 2 && this.charId === 'kazan' && this.heat >= KZ.heat.max) { this.melee.molten = true; this.heat = 0; this.heatT = 0; FX.burst(handPos(this, 'R'), 'fire', 24, 4, 1.2); Sfx.play('fire'); } // stacks are spent even if the hit misses
     this.castId = ++CAST_ID; this.setState('melee'); }
@@ -2188,8 +2449,8 @@ class Fighter {
       if (P.plates) P.plates.forEach((o, i) => { const a = t * (bs === 'earth' ? 1.8 : 2.4) + i / 3 * Math.PI * 2, r = bs === 'earth' ? 1.25 : 1.3; o.position.set(Math.cos(a) * r, (bs === 'earth' ? .4 : .7) + i * .45 + Math.sin(t * 3 + i) * .1, Math.sin(a) * r); o.rotation.set(t + i, t * 1.4, 0); });
     }
     if (bs === 'all') {
-      if (!R.orbs) { R.orbs = ELS.map(e => { const s = glowSprite(EL[e].color, .5, .95); R.root.add(s); return s; }); }
-      R.orbs.forEach((o, i) => { o.visible = on; if (on) { const a = t * 3.2 + i / 5 * Math.PI * 2; o.position.set(Math.cos(a) * 1.05, 1 + Math.sin(a * 2 + i) * .45, Math.sin(a) * 1.05); } });
+      if (!R.orbs) { R.orbs = ELS6.map(e => { const s = glowSprite(EL[e].color, .5, .95); R.root.add(s); return s; }); }
+      R.orbs.forEach((o, i) => { o.visible = on; if (on) { const a = t * 3.2 + i / 6 * Math.PI * 2; o.position.set(Math.cos(a) * 1.05, 1 + Math.sin(a * 2 + i) * .45, Math.sin(a) * 1.05); } });
       if (on && Math.random() < .25) { const a = R.orbs[(Math.random() * 5) | 0], b = R.orbs[(Math.random() * 5) | 0]; if (a !== b) boltFX(a.getWorldPosition(new V3()), b.getWorldPosition(new V3()), 0xc8b8ff, .025, .07, .2); }
     }
     if (!on) return;
@@ -2205,7 +2466,8 @@ class Fighter {
   }
   onBlockStart(opp) {
     const bs = this.blockStyle;
-    if ((bs === 'earth' || bs === 'water') && this.wallCD <= 0) this.blockWall = spawnBlockWall(this, opp, bs);
+    startShieldFX(this);
+    if ((bs === 'earth' || bs === 'stone') && this.wallCD <= 0) this.blockWall = spawnBlockWall(this, opp, bs);
     if (bs === 'fire') { FX.burst(this.pos.clone().setY(this.pos.y + .3), 'fire', 14, 4); Sfx.play('fire'); }
     else if (bs === 'water') Sfx.play('water'); else if (bs === 'wind') Sfx.play('wind'); else if (bs === 'lightning') Sfx.play('lightning');
     else if (bs === 'all') { Sfx.play('wind'); FX.shock(this.pos.clone().setY(this.pos.y + 1), 'lightning', 1); }
@@ -2373,7 +2635,7 @@ class AI {
     }
     let threat = null, tmin = 9;
     for (const p of PROJ) {
-      if (p.owner === f || p.dead || !this.sees(p)) continue;
+      if (p.owner === f || (p.owner && p.owner.team === f.team) || p.dead || !this.sees(p)) continue;
       if (p.kind === 'ball') { _v3.copy(f.pos).setY(f.pos.y + 1).sub(p.pos); const dd = _v3.length(); const approach = p.dir.dot(_v3.normalize()); const tt = dd / p.speed; if (approach > .8 && tt < .8 && tt < tmin) { tmin = tt; threat = p; } }
       else if (p.kind === 'wave') { _v3.copy(f.pos).sub(p.pos); const along = _v3.dot(p.dir); if (along > -.5 && along < 6 && Math.abs(_v3.x * p.dir.z - _v3.z * p.dir.x) < p.width / 2 + .5) { threat = p; tmin = 0; } }
       else if (p.kind === 'tornado') { if (Math.hypot(p.pos.x - f.pos.x, p.pos.z - f.pos.z) < 5.5) { threat = p; tmin = 0; } }
@@ -2393,10 +2655,15 @@ class AI {
     if (!blocked) for (const w of WALLS) { if (w.personal) continue; for (let k = .15; k < 1; k += .1) { _v3.lerpVectors(f.pos, tgt.pos, k); _v3.y += 1; if (wallHit(w, _v3, .2)) { blocked = true; break; } } if (blocked) break; }
     const opening = ['down', 'getup', 'hit'].includes(tgt.state) || (tgt.state === 'cast' && tgt.cast && tgt.cast.fired) || tgt.state === 'block' && false;
     const aggr = D.aggr * this.mood * (opening ? 1.5 : 1);
+    if (f.isMaster) {
+      if (f.seal && f.pendingFuse && (f.cds.mf || 0) <= 0 && f.mana >= 35 && Math.random() < aggr * .7) { I.ability = 'mfuse'; return; }
+      if (f.seal && f.seal.el === f.melEl && f.swapCd <= 0 && Math.random() < .5) { f.setElement6(pick(ELS6.filter(e => e !== f.melEl))); }
+      else if (!f.seal && f.swapCd <= 0 && Math.random() < .12) f.setElement6(pick(ELS6));
+    }
     if (f.spirit >= 100 && !blocked && dist >= K.superR[0] && dist <= K.superR[1] && Math.random() < aggr * .6) { I.ult = true; return; }
     if (dist < 2.1 && f.onGround && Math.random() < aggr) { I.melee = true; this.meleeChain = Math.random() < D.follow ? 2 : Math.random() < .5 ? 1 : 0; return; }
     if (!blocked && this.pace <= 0 && Math.random() < aggr) {
-      const opts = K.moves.filter(m => dist >= m[3] && dist <= m[4] && (f.cds[m[0]] || 0) <= 0);
+      const opts = K.moves.filter(m => dist >= m[3] && dist <= m[4] && (f.cds[(AB[m[0]] && AB[m[0]].slot) || m[0]] || 0) <= 0);
       if (opts.length) { let r = Math.random() * opts.reduce((s, m) => s + m[2], 0); for (const m of opts) { r -= m[2]; if (r <= 0) { I.ability = m[0]; this.pace = m[1] * rand(.8, 1.6) / D.aggr; if (m[0] === K.basic) this.chainLeft = Math.random() < D.follow ? 2 : Math.random() < .5 ? 1 : 0; return; } } }
     }
     // 3) movement: keep the element's preferred range, circle, use cover
@@ -2431,13 +2698,24 @@ function readPlayerIntent() {
   I.jump = P('Space'); I.jumpHeld = !!KEYS.Space || !!TOUCH.btn.Space;
   I.dash = P('ShiftLeft') || P('ShiftRight'); I.melee = P('KeyJ'); I.block = !!KEYS.KeyK || !!TOUCH.btn.KeyK; I.ult = P('KeyE');
   I.elems = []; I.ability = null;
-  if (hero.isMaster) { for (const [k, d, e] of MASTER_KEYS) if (P(k) || P(d)) I.elems.push(e); }
+  if (hero.isMaster) { if (P('KeyU')) I.ability = 'mswap'; ELS6.forEach((e, k) => { if (P('Digit' + (k + 1))) I.ability = 'msel:' + e; }); if (P('KeyI')) I.ability = 'm1'; if (P('KeyO')) I.ability = 'm2'; if (P('KeyP')) I.ability = 'mfuse'; }
   else { RAVEN_KEYS.forEach(([k, d], i) => { if (P(k) || P(d)) I.ability = hero.kit.btn[i][0]; }); }
 }
 const TBTN = {}, KSLOT = {};
 const ICON = n => `url(assets/ui/${n}.webp)`;
 function ctrlDefs() {
   const el = hero.el, K = hero.kit, kz = hero.charId === 'kazan', rk = hero.charId === 'rakan';
+  if (hero.isMaster) return [
+    { code: 'KeyJ', key: 'J', icon: 'sk_fist', kind: 'melee', name: 'Combo' },
+    { code: 'KeyU', key: 'U', icon: 'ic_fire', kind: 'swap', ab: null, name: 'Switch element (1-6 direct)' },
+    { code: 'KeyI', key: 'I', icon: 'sk_fire', ab: 'm1', kind: 'mskill', name: 'Skill 1 (15 energy)', tag: '1' },
+    { code: 'KeyO', key: 'O', icon: 'sk_fire', ab: 'm2', kind: 'mskill', name: 'Skill 2 (25 energy)', tag: '2' },
+    { code: 'KeyP', key: 'P', icon: 'sk_super', ab: 'mfuse', kind: 'fuse', name: 'Fusion (seal + 35 energy)' },
+    { code: 'KeyE', key: 'E', icon: 'sk_super', kind: 'super', ab: 'm_su', name: 'Super' },
+    { code: 'ShiftLeft', key: 'Shift', icon: 'sk_dash', kind: 'dash', name: 'Dash' },
+    { code: 'KeyK', key: 'K', icon: null, kind: 'block', name: 'Block' },
+    { code: 'Space', key: 'Space', icon: 'sk_jump', kind: 'jump', name: 'Jump' },
+  ];
   return [
     { code: 'KeyJ', key: 'J', icon: 'sk_fist', kind: 'melee', name: 'Combo' },
     { code: 'KeyU', key: 'U', icon: kz ? 'sk_fire' : 'ic_' + el, ab: K.btn[0][0], kind: 'basic', name: K.btn[0][1] + ' (tap ×3)' },
@@ -2450,7 +2728,7 @@ function ctrlDefs() {
   ];
 }
 // [right, bottom, size] in px from the bottom-right corner (landscape phone)
-const TOUCH_LAYOUT = { KeyU: [18, 16, 98], KeyJ: [128, 12, 64], KeyI: [114, 88, 64], KeyO: [34, 126, 62], KeyE: [202, 50, 60], KeyK: [198, 124, 54], Space: [110, 166, 54], ShiftLeft: [36, 200, 52] };
+const TOUCH_LAYOUT = { KeyU: [18, 16, 98], KeyJ: [128, 12, 64], KeyI: [114, 88, 64], KeyO: [34, 126, 62], KeyE: [202, 50, 60], KeyK: [198, 124, 54], Space: [110, 166, 54], ShiftLeft: [36, 200, 52], KeyP: [262, 16, 56] };
 function slotEl(d, cls) {
   const b = document.createElement('div'); b.className = cls + (d.icon ? '' : ' shieldIc');
   if (d.icon) b.style.backgroundImage = ICON(d.icon);
@@ -2484,6 +2762,9 @@ function buildTouch() {
   zone.addEventListener('pointerup', endJ); zone.addEventListener('pointercancel', endJ);
 }
 function slotState(d) {
+  if (d.kind === 'swap') { const cd = Math.max(0, hero.swapCd); return [cd / MM.swapGap * 100, '', false]; }
+  if (d.kind === 'fuse') { const cd = hero.cds.mf || 0; const rdy = cd <= 0 && hero.pendingFuse && hero.seal; return [cd / 14 * 100, cd > 0 ? Math.ceil(cd) + '' : '', !!rdy]; }
+  if (d.kind === 'mskill') { const cd = hero.cds[d.ab === 'm1' ? 'm1' : 'm2'] || 0, base = d.ab === 'm1' ? MM.s1.cd : MM.s2.cd; return [cd / base * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
   if (d.kind === 'basic') { const st = hero.chainT > 0 && hero.chainEl === d.ab ? hero.comboStep : 0; return [0, '', false, st]; }
   if (d.ab && d.kind !== 'super') { const cd = hero.cds[d.ab] || 0; return [cd / AB[d.ab].cd * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
   if (d.kind === 'super') return [100 - hero.spirit, '', hero.spirit >= 100];
@@ -2491,6 +2772,8 @@ function slotState(d) {
   return [0, '', false];
 }
 function updateControls() {
+  if (hero && hero.isMaster) { const ic = 'ic_' + (hero.melEl === 'lightning' ? 'lightning' : hero.melEl), sk = 'sk_' + (hero.melEl === 'ice' ? 'water' : hero.melEl);
+    for (const M of [TBTN, KSLOT]) { if (M.KeyU && M.KeyU._ic !== ic) { M.KeyU._ic = ic; M.KeyU.b.style.backgroundImage = ICON(ic); } for (const c of ['KeyI', 'KeyO']) if (M[c] && M[c]._ic !== sk) { M[c]._ic = sk; M[c].b.style.backgroundImage = ICON(sk); } } }
   for (const M of [TBTN, KSLOT]) for (const c in M) {
     const d = M[c], b = d.b; const [p, tx, rdy] = slotState(d); const pp = Math.round(p);
     if (pp !== b._p) { b._p = pp; b._cd.style.setProperty('--p', pp + '%'); }
@@ -2509,7 +2792,8 @@ function shake(a) { CAM.shake = Math.min(1.2, CAM.shake + a); }
 function hitstop(t) { game.hitstop = Math.max(game.hitstop, t); }
 function startCinematic(f, opp, a) { if (f === hero) { CAM.focus = f; CAM.focusT = .55; } if (a.ult) opp.freezeT = a.rel + .1; Sfx.play('ult'); popBanner(a.label || ''); }
 function updateCamera(dt) {
-  const h = hero.pos, e = enemy.pos;
+  const camH = (hero.hp > 0 || FIGHTERS.length <= 2) ? hero : (FIGHTERS.find(x => x.team === hero.team && x.hp > 0) || hero);
+  const h = camH.pos, e = (camH.target && camH.target.hp > 0 ? camH.target : enemy).pos;
   const d = _v1.copy(e).sub(h).setY(0); const dist = d.length();
   if (dist > 1.4) { d.divideScalar(dist); CAM.dir.lerp(d, 1 - Math.exp(-6 * dt)).normalize(); }
   const [cd, ch, sh] = CAM_DIST[SETTINGS.camDist] || CAM_DIST.mid;
@@ -2533,7 +2817,7 @@ function updateCamera(dt) {
   CAM.pos.y = Math.max(CAM.pos.y, groundAt(CAM.pos.x, CAM.pos.z, CAM.pos.y) + .6);
   CAM.look.x = damp(CAM.look.x, lx, 12, dt); CAM.look.y = damp(CAM.look.y, ly, 12, dt); CAM.look.z = damp(CAM.look.z, lz, 12, dt);
   camera.position.copy(CAM.pos);
-  if (game.state !== 'menu') { _v3.copy(hero.pos).setY(hero.pos.y + 1.5); const k = camClip(_v3, CAM.pos); if (k < 1) camera.position.lerpVectors(_v3, CAM.pos, Math.max(.15, k - .06)); }
+  if (game.state !== 'menu') { _v3.copy(h).setY(h.y + 1.5); const k = camClip(_v3, CAM.pos); if (k < 1) camera.position.lerpVectors(_v3, CAM.pos, Math.max(.15, k - .06)); }
   if (CAM.shake > 0) { const s = CAM.shake * CAM.shake * .3; camera.position.x += rand(-s, s); camera.position.y += rand(-s, s); camera.position.z += rand(-s, s); CAM.shake = Math.max(0, CAM.shake - dt * 2.6); }
   camera.lookAt(CAM.look);
   // fade pillars/tall rocks that block the view of either fighter
@@ -2555,15 +2839,17 @@ function updateCamera(dt) {
 // ---------------------------------------------------------------- HUD
 const HUD = {
   hp: [...document.querySelectorAll('.hp .fill')], tr: [...document.querySelectorAll('.hp .trail')], hpTxt: [...document.querySelectorAll('.hp b')],
-  sp: [...document.querySelectorAll('.sp')], wins: [$('#pb0 .wins'), $('#pb1 .wins')], timer: $('#timer'), stats: [$('#pb0 .stats'), $('#pb1 .stats')], statKey: ['', ''],
+  sp: [...document.querySelectorAll('.sp')], en: [...document.querySelectorAll('.en')], wins: [$('#pb0 .wins'), $('#pb1 .wins')], timer: $('#timer'), stats: [$('#pb0 .stats'), $('#pb1 .stats')], statKey: ['', ''],
   combo: $('#combo'), ann: $('#announce'), arrow: $('#offArrow'), mark: $('#enemyMark'), train: $('#trainInfo'),
 };
 // status icons: [icon, good/bad]
-const ST_DEF = { stab: ['ic_earth', 'good', 'Mountain Stability: −15% damage, knockback halved'], heat: ['ic_fire', 'good', 'Magma Heat stacks (3 = Molten 3rd combo hit)'], soak: ['ic_water', 'bad', 'Soaked: +10% damage taken'], static: ['ic_lightning', 'bad', 'Static: next combo hit +30'], slow: [null, 'bad', 'Slowed', '❄'], fort: ['ic_earth', 'good', 'Fortified: −20% damage taken'], haste: ['ic_wind', 'good', 'Haste: +12% speed'], ccImm: [null, 'good', 'Immune to forced displacement', '⛨'] };
+const ST_DEF = { wet: ['ic_water', 'bad', 'Wet: Winter Needle will freeze you'], root: [null, 'bad', 'Bound: cannot move or dash', '⛓'], stab: ['ic_earth', 'good', 'Mountain Stability: −15% damage, knockback halved'], heat: ['ic_fire', 'good', 'Magma Heat stacks (3 = Molten 3rd combo hit)'], soak: ['ic_water', 'bad', 'Soaked: +10% damage taken'], static: ['ic_lightning', 'bad', 'Static: next combo hit +30'], slow: [null, 'bad', 'Slowed', '❄'], fort: ['ic_earth', 'good', 'Fortified: −20% damage taken'], haste: ['ic_wind', 'good', 'Haste: +12% speed'], ccImm: [null, 'good', 'Immune to forced displacement', '⛨'] };
 function hudStatuses(i, f) {
-  const act = []; for (const k in ST_DEF) { if (k === 'heat') { if (f.heat > 0) act.push([k, f.heat]); continue; } const v = k === 'slow' ? f.slowT : f.sts[k]; if (v > 0) act.push([k, Math.ceil(v)]); }
+  const act = []; if (f.seal) act.push(['seal', EL[f.seal.el].icon]); if (f.embers > 0) act.push(['heat', f.embers]); if (f.igniteT > 0) act.push(['ign', Math.ceil(f.igniteT)]); if (f.shieldHp > 0) act.push(['shld', Math.ceil(f.shieldHp)]);
+  for (const k in ST_DEF) { if (k === 'heat') { if (f.heat > 0 && f.charId === 'kazan') act.push([k, f.heat]); continue; } const v = k === 'slow' ? f.slowT : f.sts[k]; if (v > 0) act.push([k, Math.ceil(v)]); }
   const key = act.map(a => a.join(':')).join(','); if (key === HUD.statKey[i]) return; HUD.statKey[i] = key;
-  HUD.stats[i].innerHTML = act.map(([k, s]) => { const D = ST_DEF[k]; return `<div class="st ${D[1]} ${D[0] ? '' : 'txt'}" title="${D[2]}" style="${D[0] ? `background-image:${ICON(D[0])}` : ''}">${D[3] || ''}<b>${s}</b></div>`; }).join('');
+  const XTR = { seal: ['ic_fire', 'good', 'Stored seal — switch element and press Fusion'], ign: ['sk_fire', 'good', 'Blade ignited'], shld: ['ic_water', 'good', 'Frost-rock shield'] };
+  HUD.stats[i].innerHTML = act.map(([k, s]) => { const D = ST_DEF[k] || XTR[k] || ST_DEF.stab; return `<div class="st ${D[1]} ${D[0] ? '' : 'txt'}" title="${D[2]}" style="${D[0] ? `background-image:${ICON(D[0])}` : ''}">${D[3] || ''}<b>${s}</b></div>`; }).join('');
 }
 function hudUpdate(dt) {
   [hero, enemy].forEach((f, i) => {
@@ -2571,6 +2857,7 @@ function hudUpdate(dt) {
     HUD.hp[i].style.width = f.dispHp + '%'; HUD.tr[i].style.width = f.trailHp + '%'; HUD.hp[i].classList.toggle('low', f.hp < f.maxHp * .3);
     const t = Math.ceil(f.hp) + ''; if (HUD.hpTxt[i].textContent !== t) HUD.hpTxt[i].textContent = t;
     HUD.sp[i].firstElementChild.style.width = f.spirit + '%'; HUD.sp[i].classList.toggle('full', f.spirit >= 100);
+    HUD.en[i].classList.toggle('hidden', !f.useEnergy); if (f.useEnergy) HUD.en[i].firstElementChild.style.width = f.mana + '%';
     [...HUD.wins[i].children].forEach((b, k) => b.classList.toggle('on', game.wins[i] > k));
     hudStatuses(i, f);
   });
@@ -2585,6 +2872,12 @@ function hudUpdate(dt) {
   if (!off) HUD.mark.style.transform = `translate(${(_v1.x * .5 + .5) * innerWidth}px,${(-_v1.y * .5 + .5) * innerHeight}px)`;
   HUD.arrow.style.display = off && game.state === 'fight' ? 'block' : 'none';
   if (off) { let x = _v1.x, y = _v1.y; if (_v1.z > 1) { x = -x; y = -y; } const a = Math.atan2(-y, x); const r = Math.min(innerWidth, innerHeight) * .38; HUD.arrow.style.transform = `translate(${innerWidth / 2 + Math.cos(a) * r}px,${innerHeight / 2 + Math.sin(a) * r}px) rotate(${a}rad)`; }
+  if (HUD.obars && HUD.obars.length) for (const [f, d, s] of HUD.obars) {
+    _v1.copy(f.pos).setY(f.pos.y + (f.charId === 'rakan' ? 2.9 : 2.35)).project(camera);
+    const vis = _v1.z < 1 && Math.abs(_v1.x) < 1 && Math.abs(_v1.y) < 1 && f.hp > 0 && fighting;
+    d.style.display = vis ? '' : 'none';
+    if (vis) { d.style.transform = `translate(${(_v1.x * .5 + .5) * innerWidth}px,${(-_v1.y * .5 + .5) * innerHeight}px) translate(-50%,-100%)`; s.style.width = Math.max(0, f.hp / f.maxHp * 100) + '%'; }
+  }
 }
 function showCombo(n) { if (n < 2) return; HUD.combo.querySelector('b').textContent = n; HUD.combo.classList.add('on'); game.comboT = 1.4; }
 function announce(text, sub = '') { const a = HUD.ann; a.innerHTML = text + (sub ? `<small>${sub}</small>` : ''); a.classList.remove('show'); void a.offsetWidth; a.classList.add('show'); }
@@ -2592,7 +2885,7 @@ function popBanner(text) { if (text) announce(`<span style="font-size:.5em">${te
 function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => e.classList.remove('on'), 1600); }
 const DMG = [];
 function popText(pos, text, color = '#fff', size = 26) { if (DMG.length > 40) { DMG[0].el.remove(); DMG.shift(); } const el = document.createElement('div'); el.className = 'dmg'; el.textContent = text; el.style.color = color; el.style.fontSize = size + 'px'; $('#dmgLayer').appendChild(el); DMG.push({ el, pos: pos.clone(), t: 0, vy: 1.2 }); }
-function popDamage(pos, d, el) { const c = { fire: '#ffb070', water: '#9fd4ff', wind: '#e6fff4', earth: '#e8c890', lightning: '#d8ccff', block: '#9aa' }[el] || '#fff'; popText(pos.clone().add(new V3(rand(-.3, .3), .3, rand(-.3, .3))), Math.round(d), c, d >= 120 ? 34 : d >= 60 ? 28 : 22); }
+function popDamage(pos, d, el) { const c = { fire: '#ffb070', water: '#9fd4ff', wind: '#e6fff4', earth: '#e8c890', lightning: '#d8ccff', ice: '#bfe9ff', block: '#9aa' }[el] || '#fff'; popText(pos.clone().add(new V3(rand(-.3, .3), .3, rand(-.3, .3))), Math.round(d), c, d >= 120 ? 34 : d >= 60 ? 28 : 22); }
 function updateDmg(dt) {
   for (let i = DMG.length - 1; i >= 0; i--) {
     const d = DMG[i]; d.t += dt; d.pos.y += d.vy * dt; _v1.copy(d.pos).project(camera);
@@ -2606,17 +2899,20 @@ function updateDmg(dt) {
 const ROSTER = [
   { id: 'raven', name: 'Raven', short: 'RAVEN', title: 'Shadow of the Five Elements', img: 'assets/p_raven.jpg', available: true, about: 'A shadow ninja who masters one element per fight. Pick the element before the match.' },
   { id: 'kazan', name: 'Kazan', short: 'KAZAN', title: 'Lord of Magma', img: 'assets/p_kazan.jpg', available: true, legendary: true, fixedEl: 'Magma', about: 'A heavy volcanic warrior: he controls the ground with lava and punishes up close. Slower and easier to dodge than Raven, but his skills leave burning ground behind.' },
+  { id: 'sira', name: 'Sira', short: 'SIRA', title: 'Blade of Frost', img: 'assets/p_sira.jpg', available: true, legendary: true, fixedEl: 'Frost', about: 'The fastest fighter: a sword duelist of water and ice. Water skills mark the enemy Wet; the Winter Needle freezes a Wet target. Fragile — she wins by timing, not by trading.' },
+  { id: 'rayn', name: 'Rayn', short: 'RAYN', title: 'Blade of Flame', img: 'assets/p_rayn.jpg', available: true, legendary: true, fixedEl: 'Flame', about: 'A fire swordsman. Finishing his combo grants Embers; igniting the blade turns them into burning steel — stronger cuts, burning wounds and a bigger Flame Crescent.' },
   { id: 'rakan', name: 'Rakan', short: 'RAKAN', title: 'Guardian of the Mountain', img: 'assets/p_rakan.jpg', available: true, legendary: true, fixedEl: 'Stone', about: 'A stone giant who wins up close: heavy fists, high defense, and a Gravity Counter that returns blows and projectiles when timed right. Big and slow to wind up — bait his swings and punish.' },
-  { id: 'master', name: 'Elemental Master', short: 'MASTER', title: 'Wielder of all five', img: 'assets/p_hero.jpg', available: false },
-  { id: 'soon_a', name: 'Unknown', available: false }, { id: 'soon_b', name: 'Unknown', available: false },
+  { id: 'master', name: 'Elemental Master', short: 'MASTER', title: 'Wielder of the six', img: 'assets/p_hero.jpg', available: true, legendary: true, fixedEl: 'All', about: 'Commands all six elements. Land a skill to store its seal, switch element, then fuse the two — fifteen fusions in all. Runs on energy, and his super unites the six.' },
 ];
-const SKINS = { rakan: [{ id: 'default', name: 'Mountain Plate', available: true, img: 'assets/full_rakan.jpg' }, { id: 'granite', name: 'Granite Plate', available: false }, { id: 'jade', name: 'Jade Plate', available: false }], kazan: [{ id: 'default', name: 'Volcanic Garb', available: true, img: 'assets/full_kazan.jpg' }, { id: 'obsidian', name: 'Obsidian Garb', available: false }, { id: 'ash', name: 'Ash Garb', available: false }, { id: 'inferno', name: 'Inferno Garb', available: false }], raven: [{ id: 'default', name: 'Shadow Garb', available: true, img: 'assets/full_raven.jpg' }, { id: 'ember', name: 'Ember Garb', available: false }, { id: 'tide', name: 'Tide Garb', available: false }, { id: 'storm', name: 'Storm Garb', available: false }] };
+const SKINS = { sira: [{ id: 'default', name: 'Frost Plate', available: true, img: 'assets/full_sira.jpg' }, { id: 'tide', name: 'Tide Plate', available: false }], rayn: [{ id: 'default', name: 'Ashen Garb', available: true, img: 'assets/full_rayn.jpg' }, { id: 'sun', name: 'Sun Garb', available: false }], master: [{ id: 'default', name: 'Avatar Robes', available: true, img: 'assets/full_hero.jpg' }, { id: 'gold', name: 'Gilded Robes', available: false }], rakan: [{ id: 'default', name: 'Mountain Plate', available: true, img: 'assets/full_rakan.jpg' }, { id: 'granite', name: 'Granite Plate', available: false }, { id: 'jade', name: 'Jade Plate', available: false }], kazan: [{ id: 'default', name: 'Volcanic Garb', available: true, img: 'assets/full_kazan.jpg' }, { id: 'obsidian', name: 'Obsidian Garb', available: false }, { id: 'ash', name: 'Ash Garb', available: false }, { id: 'inferno', name: 'Inferno Garb', available: false }], raven: [{ id: 'default', name: 'Shadow Garb', available: true, img: 'assets/full_raven.jpg' }, { id: 'ember', name: 'Ember Garb', available: false }, { id: 'tide', name: 'Tide Garb', available: false }, { id: 'storm', name: 'Storm Garb', available: false }] };
 const availableChars = () => ROSTER.filter(c => c.available);
-const PROFILE = { char: 'raven', el: 'fire', skin: 'default', opp: { char: 'random', el: 'random' }, diff: 'normal', mode: 'versus' };
+const PROFILE = { char: 'raven', el: 'fire', skin: 'default', opp: { char: 'random', el: 'random' }, ally: { char: 'random' }, diff: 'normal', mode: 'versus' };
 try { const p = JSON.parse(localStorage.getItem('ea_profile') || '{}'); Object.assign(PROFILE, p, { opp: Object.assign({}, PROFILE.opp, p.opp) }); } catch (e) { }
 if (!ROSTER.find(c => c.id === PROFILE.char && c.available)) PROFILE.char = availableChars()[0].id;
 const skinOf = id => (PROFILE.skins = PROFILE.skins || {})[id] || 'default';
 if (PROFILE.opp.char !== 'random' && !ROSTER.find(c => c.id === PROFILE.opp.char && c.available)) PROFILE.opp.char = 'random';
+if (!PROFILE.ally || (PROFILE.ally.char !== 'random' && !ROSTER.find(c => c.id === PROFILE.ally.char && c.available))) PROFILE.ally = { char: 'random' };
+if (!['versus', 'duo', 'rumble', 'training'].includes(PROFILE.mode)) PROFILE.mode = 'versus';
 if (!ELS.includes(PROFILE.el)) PROFILE.el = 'fire';
 function saveProfile() { try { localStorage.setItem('ea_profile', JSON.stringify(PROFILE)); } catch (e) { } }
 
@@ -2624,44 +2920,109 @@ function saveProfile() { try { localStorage.setItem('ea_profile', JSON.stringify
 const game = { state: 'loading', mode: 'lobby', time: 0, rdt: 0, timer: CFG.ROUND_TIME, round: 1, wins: [0, 0], hitstop: 0, timeScale: 1, diff: 'normal', comboT: 0, koVictim: null, phaseT: 0,
   sel: { p: { char: 'raven', el: 'fire' }, ai: { char: 'raven', el: 'fire' } }, stats: { dealt: 0, taken: 0, maxCombo: 0, comboDmg: 0 } };
 let hero, enemy, ai;
+let FIGHTERS = [], OBS0 = null, WORLD_K = 1;
+const opps = f => FIGHTERS.filter(o => o !== f && o.team !== f.team && o.hp > 0);
+function nearestOpp(f, pos) { let b = null, bd = 1e9; for (const o of opps(f)) { const d = (o.pos.x - pos.x) ** 2 + (o.pos.z - pos.z) ** 2; if (d < bd) { bd = d; b = o; } } return b; }
+function pickTarget(f) { const os = opps(f); if (!os.length) return null; let best = os[0], bd = 1e9; for (const o of os) { const d = o.pos.distanceToSquared(f.pos); if (d < bd) { bd = d; best = o; } } const cur = f.target; if (cur && cur !== best && os.includes(cur) && cur.pos.distanceToSquared(f.pos) < bd * 1.69) return cur; return best; }
+function teamsAlive() { const s = new Set(); for (const f of FIGHTERS) if (f.hp > 0) s.add(f.team); return [...s]; }
+function setWorldScale(k) { // bigger map for team modes: the whole built arena scales in XZ, heights stay
+  WORLD_K = k; if (ARENA.grp) ARENA.grp.scale.set(k, 1, k);
+  if (OBS0) for (const [o, b] of OBS0) { o.x = b.x * k; o.z = b.z * k; if (b.r !== undefined) o.r = b.r * k; if (b.hw !== undefined) { o.hw = b.hw * k; o.hd = b.hd * k; } }
+  CFG.ARENA_R = 24 * k;
+}
 const START_H = new V3(0, 0, 11), START_E = new V3(0, 0, -11);
-const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : f.charId === 'kazan' ? 'Kazan · Magma' : f.charId === 'rakan' ? 'Rakan · Stone' : `Raven · ${EL[f.el].name}`;
+const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : f.charId === 'kazan' ? 'Kazan · Magma' : f.charId === 'rakan' ? 'Rakan · Stone' : f.charId === 'sira' ? 'Sira · Frost' : f.charId === 'rayn' ? 'Rayn · Flame' : `Raven · ${EL[f.el].name}`;
 function makeFighter(sel, isPlayer, variant) {
   if (sel.char === 'dummy') return new Fighter({ name: 'Training Dummy', dummy: true, el: 'earth', kit: RAVEN_KITS.earth });
-  if (sel.char === 'master') { const K = MASTER_KIT; return new Fighter({ name: 'Elemental Master', isMaster: true, isPlayer, kit: K, speed: K.speed, airJumps: 1, glide: true, variant }); }
+  if (sel.char === 'master') { const K = MASTER_KIT; const f = new Fighter({ name: 'Elemental Master', char: 'master', isMaster: true, isPlayer, kit: K, speed: K.speed, airJumps: 1, glide: true, variant }); f.useEnergy = true; f.melEl = 'fire'; f.spD = MM.spD; f.spT = MM.spT; return f; }
+  if (sel.char === 'sira') { const K = SIRA_KIT; const f = new Fighter({ name: 'Sira', char: 'sira', isMaster: false, isPlayer, el: 'water', blockStyle: 'frost', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); f.comboSpd = BAL.chars.sira.comboSpd; return f; }
+  if (sel.char === 'rayn') { const K = RAYN_KIT; return new Fighter({ name: 'Rayn', char: 'rayn', isMaster: false, isPlayer, el: 'fire', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
   if (sel.char === 'rakan') { const K = RAKAN_KIT; return new Fighter({ name: 'Rakan', char: 'rakan', isMaster: false, isPlayer, el: 'earth', blockStyle: 'stone', kit: K, speed: K.speed, armor: 1, airJumps: 0, glide: false, heal: 0, variant }); }
-  if (sel.char === 'kazan') { const K = KAZAN_KIT; return new Fighter({ name: 'Kazan', char: 'kazan', isMaster: false, isPlayer, el: 'fire', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
+  if (sel.char === 'kazan') { const K = KAZAN_KIT; return new Fighter({ name: 'Kazan', char: 'kazan', isMaster: false, isPlayer, el: 'fire', blockStyle: 'magma', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
   const K = RAVEN_KITS[sel.el]; return new Fighter({ name: 'Raven', char: 'raven', isMaster: false, isPlayer, el: sel.el, kit: K, speed: K.speed, armor: K.armor, airJumps: K.airJumps, glide: K.glide, heal: K.heal, variant });
 }
 function disposeFighter(f) { if (!f) return; scene.remove(f.rig.root); f.rig.root.traverse(o => { if (o.isMesh && o.material && o.material.dispose && f.rig.glb && o.isSkinnedMesh) o.material.dispose(); }); }
-function setupFighters() {
-  disposeFighter(hero); disposeFighter(enemy);
-  const { p, ai: a } = game.sel; const mirror = p.char === a.char && (p.char === 'master' || p.el === a.el);
-  hero = makeFighter(p, true, 'a'); enemy = makeFighter(a, false, mirror ? 'b' : 'a');
-  ai = enemy.isDummy ? null : new AI(enemy, enemy.kit, game.diff);
-  $('#pb0 .pname').textContent = fighterLabel(hero) + ' (YOU)'; $('#pb1 .pname').textContent = fighterLabel(enemy) + (enemy.isDummy ? '' : ` · ${game.diff.toUpperCase()}`);
+function syncRightBar(t, force) {
+  if (!t || (!force && HUD._rt === t)) return; HUD._rt = t;
+  $('#pb1 .pname').textContent = fighterLabel(t) + (t.isDummy || FIGHTERS.length > 2 ? '' : ` · ${game.diff.toUpperCase()}`);
   const por = f => f.isDummy ? 'none' : `url(assets/${f.isMaster ? 'p_hero' : 'p_' + f.charId}.jpg)`;
-  $('#pb0 .portrait').style.backgroundImage = por(hero); $('#pb1 .portrait').style.backgroundImage = por(enemy);
-  $('#pb1 .portrait').style.background = enemy.isDummy ? 'radial-gradient(circle,#8a6a3a,#3a2a14)' : '';
-  if (!enemy.isDummy) $('#pb1 .portrait').style.backgroundImage = por(enemy);
-  buildControls();
+  $('#pb1 .portrait').style.background = t.isDummy ? 'radial-gradient(circle,#8a6a3a,#3a2a14)' : '';
+  if (!t.isDummy) $('#pb1 .portrait').style.backgroundImage = por(t);
+}
+function buildObars() { // small HP bars above everyone else's head in team / rumble matches
+  let c = $('#obars'); if (!c) { c = document.createElement('div'); c.id = 'obars'; $('#hud').appendChild(c); }
+  c.innerHTML = ''; HUD.obars = [];
+  if (FIGHTERS.length <= 2) return;
+  for (const f of FIGHTERS) { if (f === hero) continue; const d = document.createElement('div'); d.className = 'ob' + (f.team === hero.team ? ' ally' : ''); d.innerHTML = `<b>${f.team === hero.team ? 'ALLY · ' : ''}${f.name}</b><i><s></s></i>`; c.appendChild(d); HUD.obars.push([f, d, d.querySelector('s')]); }
+}
+function setupFighters(slots) {
+  for (const f of FIGHTERS) disposeFighter(f);
+  if (!FIGHTERS.includes(hero)) disposeFighter(hero); if (!FIGHTERS.includes(enemy)) disposeFighter(enemy);
+  FIGHTERS = [];
+  if (!slots) { const { p, ai: a } = game.sel; slots = [Object.assign({ team: 0, isPlayer: true }, p), Object.assign({ team: 1 }, a)]; }
+  const used = {};
+  for (const s of slots) {
+    const key = s.char + (s.char === 'raven' ? ':' + s.el : '');
+    const f = makeFighter(s, !!s.isPlayer, used[key] ? 'b' : 'a'); used[key] = 1;
+    f.team = s.team || 0; FIGHTERS.push(f); if (s.isPlayer) hero = f;
+  }
+  enemy = FIGHTERS.find(f => f.team !== hero.team) || FIGHTERS[1];
+  for (const f of FIGHTERS) { f.target = f === hero ? enemy : hero; f.ai = (f === hero || f.isDummy) ? null : new AI(f, f.kit, game.diff); }
+  ai = enemy.ai || null;
+  $('#pb0 .pname').textContent = fighterLabel(hero) + ' (YOU)';
+  const por = f => f.isDummy ? 'none' : `url(assets/${f.isMaster ? 'p_hero' : 'p_' + f.charId}.jpg)`;
+  $('#pb0 .portrait').style.backgroundImage = por(hero);
+  syncRightBar(enemy, true);
+  buildControls(); buildObars();
 }
 function clearField() { for (const p of PROJ) killProj(p, false); PROJ.length = 0; for (const w of WALLS) scene.remove(w.mesh); WALLS.length = 0; TIMERS.length = 0; TELES.length = 0; clearLava(); }
 function trainingSpots() { const s = ARENA.dummySpot; const c = new V3(-s.x, 0, -s.z).normalize(); return [new V3(s.x, .38, s.z).addScaledVector(c, 7.5).setY(0), new V3(s.x, .38, s.z)]; }
 function startRound() {
   clearField();
-  const s1 = hero.spirit, s2 = enemy.spirit;
+  const sp = FIGHTERS.map(f => f.spirit), K = WORLD_K;
   if (game.mode === 'training') { const [h, d] = trainingSpots(); hero.reset(h); enemy.reset(d); enemy.home = d.clone(); hero.yaw = Math.atan2(d.x - h.x, d.z - h.z); enemy.yaw = hero.yaw + Math.PI; CAM.dir.set(d.x - h.x, 0, d.z - h.z).normalize(); }
+  else if (game.mode === 'duo') {
+    const T0 = FIGHTERS.filter(f => f.team === 0), T1 = FIGHTERS.filter(f => f.team !== 0);
+    T0.forEach((f, i) => { f.reset(new V3(i ? 2.8 : -2.8, 0, 11 * K)); f.yaw = Math.PI; });
+    T1.forEach((f, i) => { f.reset(new V3(i ? 2.8 : -2.8, 0, -11 * K)); f.yaw = 0; });
+    CAM.dir.set(0, 0, -1);
+  } else if (game.mode === 'rumble') {
+    const R = 10.5 * K;
+    FIGHTERS.forEach((f, i) => { const a = Math.PI / 2 + i * Math.PI * 2 / 3; f.reset(new V3(Math.cos(a) * R, 0, Math.sin(a) * R)); f.yaw = Math.atan2(-f.pos.x, -f.pos.z); });
+    CAM.dir.copy(hero.pos).multiplyScalar(-1).setY(0).normalize();
+  }
   else { hero.reset(START_H); enemy.reset(START_E); hero.yaw = Math.PI; enemy.yaw = 0; CAM.dir.set(0, 0, -1); }
-  hero.spirit = s1; enemy.spirit = s2;
+  FIGHTERS.forEach((f, i) => { f.spirit = sp[i]; f._out = false; });
+  for (const f of FIGHTERS) { const nt = pickTarget(f); if (nt) f.target = nt; }
+  enemy = hero.target || enemy; syncRightBar(enemy, true); game.winTeam = undefined;
   game.timer = CFG.ROUND_TIME; game.state = 'intro'; game.phaseT = 0; game.timeScale = 1; game.koVictim = null; game.gongHit = false;
   CAM.introT = game.mode === 'training' ? 0 : game.round === 1 ? 1 : .35;
   CAM.pos.copy(hero.pos).addScaledVector(CAM.dir, -5).setY(hero.pos.y + 3);
   if (game.mode === 'training') announce('TRAINING', 'HIT THE DUMMY');
   else announce(`ROUND ${game.round}`, game.round === 3 ? 'FINAL ROUND' : '');
 }
-function onKO(victim) { if (game.state !== 'fight' || game.mode === 'training') return; game.state = 'ko'; game.phaseT = 0; game.timeScale = .3; game.koVictim = victim; Sfx.play('ko'); shake(1); vibrate(120); announce('K.O.', victim === enemy ? 'YOU WIN THE ROUND' : 'ROUND LOST'); game.wins[victim === enemy ? 0 : 1]++; }
-function timeUp() { game.state = 'ko'; game.phaseT = 0; game.timeScale = 1; const w = hero.hp >= enemy.hp ? 0 : 1; game.wins[w]++; game.koVictim = w === 0 ? enemy : hero; announce('TIME!', w === 0 ? 'YOU WIN THE ROUND' : 'ROUND LOST'); }
+function onKO(victim) {
+  if (game.state !== 'fight' || game.mode === 'training') return;
+  const ta = teamsAlive(), ffaHeroOut = game.mode === 'rumble' && victim === hero;
+  if (FIGHTERS.length > 2 && ta.length > 1 && !ffaHeroOut) { // someone is down but the round goes on
+    if (victim._out) return; victim._out = true;
+    Sfx.play('ko'); shake(.7); vibrate(80); game.hitstop = Math.max(game.hitstop, .22);
+    announce('DOWN!', victim === hero ? 'YOUR ALLY FIGHTS ON' : fighterLabel(victim).toUpperCase() + ' IS OUT');
+    return;
+  }
+  game.state = 'ko'; game.phaseT = 0; game.timeScale = .3; game.koVictim = victim; Sfx.play('ko'); shake(1); vibrate(120);
+  const wt = ffaHeroOut ? +(ta.find(t => t !== hero.team) ?? 1) : ta.length ? +ta[0] : (victim.team === hero.team ? 1 : 0);
+  game.winTeam = wt; const won = wt === hero.team;
+  announce('K.O.', won ? 'YOU WIN THE ROUND' : 'ROUND LOST'); game.wins[won ? 0 : 1]++;
+}
+function timeUp() {
+  game.state = 'ko'; game.phaseT = 0; game.timeScale = 1;
+  const hpT = {}; for (const f of FIGHTERS) hpT[f.team] = (hpT[f.team] || 0) + Math.max(0, f.hp) / f.maxHp;
+  let wt = hero.team, best = hpT[hero.team] || 0; for (const k in hpT) if (hpT[k] > best) { best = hpT[k]; wt = +k; }
+  game.winTeam = wt; const won = wt === hero.team;
+  game.wins[won ? 0 : 1]++; game.koVictim = won ? (FIGHTERS.find(f => f.team !== hero.team && f.hp > 0) || enemy) : hero;
+  announce('TIME!', won ? 'YOU WIN THE ROUND' : 'ROUND LOST');
+}
 function updateFlow(dt) {
   game.phaseT += dt;
   if (game.state === 'intro') {
@@ -2675,18 +3036,23 @@ function updateFlow(dt) {
   }
   else if (game.state === 'ko') {
     if (game.phaseT > .55) game.timeScale = damp(game.timeScale, 1, 3, dt / Math.max(.05, game.timeScale));
-    if (game.phaseT > 1.6) { const w = game.koVictim === enemy ? hero : enemy; if (w.state !== 'win' && w.onGround) { w.setState('win'); w.cast = null; } }
+    if (game.phaseT > 1.6) { const wt = game.winTeam !== undefined ? game.winTeam : (game.koVictim === enemy ? hero.team : enemy.team); for (const w of FIGHTERS) if (w.team === wt && w.hp > 0 && w.state !== 'win' && w.onGround) { w.setState('win'); w.cast = null; } }
     if (game.phaseT > 3.6) { if (game.wins[0] >= CFG.ROUNDS_TO_WIN || game.wins[1] >= CFG.ROUNDS_TO_WIN) endMatch(); else { game.round++; startRound(); } }
   }
 }
 function endMatch() {
   game.state = 'end'; const won = game.wins[0] > game.wins[1];
   const t = $('#endTitle'); t.textContent = won ? 'VICTORY' : 'DEFEAT'; t.classList.toggle('lose', !won);
-  $('#endSub').innerHTML = `${fighterLabel(hero)} <span style="opacity:.6">vs</span> ${fighterLabel(enemy)} · ${game.diff.toUpperCase()}<br>${won ? 'Well fought.' : `<b>Tip:</b> ${tipFor(enemy)}`}`;
+  const foes = FIGHTERS.filter(f => f.team !== hero.team).map(fighterLabel).join(' & ') || fighterLabel(enemy);
+  const allies = FIGHTERS.filter(f => f.team === hero.team && f !== hero).map(fighterLabel).join(' & ');
+  $('#endSub').innerHTML = `${fighterLabel(hero)}${allies ? ' & ' + allies : ''} <span style="opacity:.6">vs</span> ${foes} · ${game.diff.toUpperCase()}<br>${won ? 'Well fought.' : `<b>Tip:</b> ${tipFor(hero.target || enemy)}`}`;
   const s = game.stats; $('#endStats').innerHTML = `<div><b>${Math.round(s.dealt)}</b><span>DAMAGE DEALT</span></div><div><b>${Math.round(s.taken)}</b><span>DAMAGE TAKEN</span></div><div><b>${s.maxCombo}</b><span>BEST COMBO</span></div>`;
   $('#endScreen').classList.remove('hidden'); showHUD(false);
 }
 function tipFor(f) {
+  if (f.charId === 'sira') return 'Sira is fast but fragile: block her Wave Slide, and when you are Wet expect the freezing Needle — dash sideways. One heavy combo of yours trades well against her.';
+  if (f.charId === 'rayn') return 'Rayn wants his blade ignited: interrupt the ignition wind-up, and step out of the Sun Cleave line early. His crescents can be reflected.';
+  if (f.charId === 'master') return 'The Master is dangerous after a skill hit — that stores a seal for a fusion. Pressure him when his energy runs low, and dodge the warned lines and circles.';
   if (f.charId === 'rakan') return 'Rakan punishes close attacks: when he crosses his arms, WAIT — hitting him in that window gets you countered. His heavy swings are slow, so step back and answer after they miss.';
   if (f.charId === 'kazan') return 'Kazan’s skills have long wind-ups: watch for the red line or circle and step out sideways, then punish him while he recovers. Never stand in his lava.';
   return { fire: 'Inferno Blast shows a red circle first — dash out of it. Fire heals a little on skill hits, so trade with combos.', water: 'Don’t eat the 3rd combo hit: it soaks you (+10% damage taken). Jump over the Wave.', wind: 'Air Blade is fast but light — block it. Walk out of the Cyclone sideways, its pull is weak.', earth: 'Rock Shot is slow: dash sideways. Walk around the Stone Wall instead of shooting into it.', lightning: 'Break line of sight with pillars to stop Chain Lightning, and keep moving during Thunderstorm.' }[f.el] || 'Keep moving and block the big shots.';
@@ -2702,18 +3068,33 @@ function showHUD(on) {
 function goFullscreen() { try { if (IS_TOUCH && !STANDALONE && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => { })).catch(() => { }); } catch (e) { } }
 function resolveOpponent() {
   const o = PROFILE.opp; const ch = o.char === 'random' ? pick(availableChars()).id : o.char;
-  game.sel.ai = { char: ch, el: ch === 'kazan' ? 'fire' : ch === 'rakan' ? 'earth' : o.el === 'random' ? pick(ELS) : o.el };
+  const FEL = { kazan: 'fire', rakan: 'earth', sira: 'water', rayn: 'fire', master: 'fire' };
+  game.sel.ai = { char: ch, el: FEL[ch] || (o.el === 'random' ? pick(ELS) : o.el) };
 }
 async function beginMatch(mode, reroll = true) {
   Sfx.init(); Sfx.play('select'); goFullscreen();
   game.mode = mode; game.diff = PROFILE.diff;
-  game.sel.p = { char: PROFILE.char, el: PROFILE.char === 'kazan' ? 'fire' : PROFILE.char === 'rakan' ? 'earth' : PROFILE.el };
-  if (mode === 'training') game.sel.ai = { char: 'dummy' }; else if (reroll) resolveOpponent();
-  if (!(await ensureChars([game.sel.p.char, game.sel.ai.char]))) return;
+  const FELP = { kazan: 'fire', rakan: 'earth', sira: 'water', rayn: 'fire', master: 'fire' };
+  const selOf = (char, elPref) => { const ch = char === 'random' ? pick(availableChars()).id : char; return { char: ch, el: FELP[ch] || (!elPref || elPref === 'random' ? pick(ELS) : elPref) }; };
+  game.sel.p = { char: PROFILE.char, el: FELP[PROFILE.char] || PROFILE.el };
+  let slots = null;
+  if (mode === 'training') game.sel.ai = { char: 'dummy' };
+  else if (mode === 'duo') {
+    const ally = selOf((PROFILE.ally && PROFILE.ally.char) || 'random');
+    const e1 = selOf(PROFILE.opp.char, PROFILE.opp.el), e2 = selOf('random');
+    slots = [Object.assign({ team: 0, isPlayer: true }, game.sel.p), Object.assign({ team: 0 }, ally), Object.assign({ team: 1 }, e1), Object.assign({ team: 1 }, e2)];
+    game.sel.ai = e1;
+  } else if (mode === 'rumble') {
+    const e1 = selOf(PROFILE.opp.char, PROFILE.opp.el), e2 = selOf('random');
+    slots = [Object.assign({ team: 0, isPlayer: true }, game.sel.p), Object.assign({ team: 1 }, e1), Object.assign({ team: 2 }, e2)];
+    game.sel.ai = e1;
+  } else if (reroll) resolveOpponent();
+  if (!(await ensureChars(slots ? slots.map(s => s.char) : [game.sel.p.char, game.sel.ai.char]))) return;
   $('#lobby').classList.remove('on'); $('#lobby').classList.add('hidden'); $('#endScreen').classList.add('hidden'); $('#pause').classList.add('hidden');
   game.stats = { dealt: 0, taken: 0, maxCombo: 0, comboDmg: 0 };
   if (ARENA.lobbyPad) ARENA.lobbyPad.visible = false; if (ARENA.lobbyKey) ARENA.lobbyKey.visible = false;
-  setupFighters(); game.wins = [0, 0]; game.round = 1; showHUD(true); startRound();
+  setWorldScale(mode === 'duo' ? 1.35 : mode === 'rumble' ? 1.2 : 1);
+  setupFighters(slots); game.wins = [0, 0]; game.round = 1; game.winTeam = undefined; showHUD(true); startRound();
 }
 const startMatch = () => beginMatch('versus');
 function togglePause() {
@@ -2748,6 +3129,7 @@ function controlsHTML() {
 
 // ---------------------------------------------------------------- LOBBY
 const LOBBY = { nav: 'home', tab: null, yaw: 0, yawV: 0, drag: null, emoteId: 0 };
+const CHAR_EL = { kazan: ['fire', 'MAGMA · FIRE + EARTH'], rakan: ['earth', 'STONE & GRAVITY'], sira: ['water', 'FROST · WATER + ICE'], rayn: ['fire', 'FLAME BLADE'], master: ['fire', 'ALL SIX ELEMENTS'] };
 const LOCK_SVG = '<svg viewBox="0 0 100 130"><path fill="#c9a24e" d="M50 5a30 30 0 0 0-30 30v20h-8v70h76V55h-8V35A30 30 0 0 0 50 5zm0 14a16 16 0 0 1 16 16v20H34V35a16 16 0 0 1 16-16z"/></svg>';
 const SIL_SVG = '<svg viewBox="0 0 100 120"><path fill="#6c5a3a" d="M50 8a18 18 0 1 1 0 36a18 18 0 1 1 0-36zM18 118c0-36 14-58 32-58s32 22 32 58z"/></svg>';
 function elIcon(e) { return ICON('ic_' + e); }
@@ -2769,17 +3151,18 @@ function initLobby() {
   if (IS_TOUCH) buildTouch();
 }
 function ensureChars(ids) { // downloads any fighter that is not on the phone yet, with a visible progress bar
-  const need = [...new Set(ids)].filter(id => (id === 'raven' || id === 'kazan' || id === 'rakan') && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
+  const need = [...new Set(ids)].filter(id => ['raven', 'kazan', 'rakan', 'sira', 'rayn'].includes(id) && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
   const ov = $('#charLoad'); ov.classList.remove('hidden'); const pr = {}; const upd = () => { const v = need.reduce((a, id) => a + (pr[id] || 0), 0) / need.length; $('#charLoadBar').style.width = Math.round(v * 100) + '%'; $('#charLoadTxt').textContent = `Summoning ${need.map(n => n[0].toUpperCase() + n.slice(1)).join(' & ')}… ${Math.round(v * 100)}%`; };
   upd(); return Promise.all(need.map(id => loadCharGLB(id, p => { pr[id] = p; upd(); }))).then(r => { ov.classList.add('hidden'); if (r.includes(false)) { toast('Download failed — check your connection'); return false; } return true; });
 }
 function lobbyShowcase() {
-  const el = PROFILE.char === 'kazan' ? 'fire' : PROFILE.char === 'rakan' ? 'earth' : PROFILE.el;
+  const el = ({ kazan: 'fire', rakan: 'earth', sira: 'water', rayn: 'fire', master: 'fire' })[PROFILE.char] || PROFILE.el;
   game.sel.p = { char: PROFILE.char, el }; game.sel.ai = { char: PROFILE.char, el };
   game.diff = PROFILE.diff; setupFighters(); enemy.rig.root.visible = false;
   const s = ARENA.lobbySpot; hero.reset(new V3(s.x, ARENA.lobbyTop, s.z)); hero.onGround = true;
 }
 function toLobby() {
+  setWorldScale(1);
   game.state = 'menu'; game.mode = 'lobby'; game.timeScale = 1; game.hitstop = 0;
   ['#pause', '#endScreen'].forEach(s => $(s).classList.add('hidden')); showHUD(false); clearField();
   lobbyShowcase(); LOBBY.tab = null; renderLobby();
@@ -2802,7 +3185,7 @@ function renderLobby() {
   document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('sel', b.dataset.nav === LOBBY.nav));
   const ch = ROSTER.find(c => c.id === PROFILE.char);
   $('#heroName').innerHTML = ch.name.toUpperCase() + (ch.legendary ? '<span class="legend">LEGENDARY</span>' : '');
-  const he = $('#heroEl'), fixed = ch.fixedEl; he.querySelector('i').style.backgroundImage = elIcon(fixed ? (ch.id === 'rakan' ? 'earth' : 'fire') : PROFILE.el); he.querySelector('span').textContent = fixed ? (ch.id === 'rakan' ? 'STONE & GRAVITY' : 'MAGMA · FIRE + EARTH') : EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
+  const he = $('#heroEl'), fixed = ch.fixedEl; he.querySelector('i').style.backgroundImage = elIcon(fixed ? CHAR_EL[ch.id][0] : PROFILE.el); he.querySelector('span').textContent = fixed ? CHAR_EL[ch.id][1] : EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
   he.style.borderColor = fixed ? '#ff7a2a' : '#' + new THREE.Color(EL[PROFILE.el].color).getHexString();
   const B = $('#sideBody'), F = $('#sideFoot'), H = $('#sideHead');
   const elRow = (cur, attr, withRnd) => `<div class="els lbl">${ELS.map(e => `<button class="elb ${cur === e ? 'sel' : ''}" ${attr}="${e}" style="background-image:${elIcon(e)}" aria-label="${EL[e].name}"><small>${EL[e].name.toUpperCase()}</small></button>`).join('')}${withRnd ? `<button class="elb rnd ${cur === 'random' ? 'sel' : ''}" ${attr}="random" aria-label="Random">?<small>RANDOM</small></button>` : ''}</div>`;
@@ -2812,12 +3195,15 @@ function renderLobby() {
     H.textContent = 'BATTLE SETUP';
     const oppChars = [['random', 'RANDOM'], ...ROSTER.filter(c => c.id.indexOf('soon') !== 0).map(c => [c.id, (c.available ? '' : '🔒 ') + c.short, !c.available])];
     B.innerHTML = `<div class="sec"><label>FIGHTER</label><div class="fcard"><div class="pt" style="background-image:url(${ch.img})"></div><div><b>${ch.name.toUpperCase()}</b><span>${ch.title} · Skin: ${SKINS[ch.id].find(s => s.id === skinOf(ch.id)).name}</span></div></div></div>
-      ${ch.fixedEl ? `<div class="sec"><label>ELEMENT</label><div class="fcard magma"><div class="pt" style="background-image:${elIcon(ch.id === 'rakan' ? 'earth' : 'fire')};border-radius:50%"></div><div><b>${ch.id === 'rakan' ? 'STONE & GRAVITY' : 'MAGMA'}</b><span>${ch.id === 'rakan' ? 'Heavy stone and gravity — Rakan’s own element, fixed.' : 'Fire + Earth — Kazan’s own element, fixed.'}</span></div></div></div>` : `<div class="sec"><label>YOUR ELEMENT</label>${elRow(PROFILE.el, 'data-el')}</div>`}
+      ${ch.fixedEl ? `<div class="sec"><label>ELEMENT</label><div class="fcard magma"><div class="pt" style="background-image:${elIcon(CHAR_EL[ch.id][0])};border-radius:50%"></div><div><b>${CHAR_EL[ch.id][1].split(' ·')[0]}</b><span>${CHAR_EL[ch.id][1]} — this fighter’s own element, fixed.</span></div></div></div>` : `<div class="sec"><label>YOUR ELEMENT</label>${elRow(PROFILE.el, 'data-el')}</div>`}
       <div class="sec"><label>OPPONENT</label>${seg('data-oc', oppChars, PROFILE.opp.char)}</div>
-      ${PROFILE.opp.char === 'kazan' || PROFILE.opp.char === 'rakan' ? '' : `<div class="sec"><label>OPPONENT ELEMENT${PROFILE.opp.char === 'random' ? ' (IF RAVEN)' : ''}</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>`}
+      ${CHAR_EL[PROFILE.opp.char] ? '' : `<div class="sec"><label>OPPONENT ELEMENT${PROFILE.opp.char === 'random' ? ' (IF RAVEN)' : ''}</label>${elRow(PROFILE.opp.el, 'data-oe', true)}</div>`}
       <div class="sec"><label>AI DIFFICULTY</label>${seg('data-d', [['easy', 'EASY'], ['normal', 'NORMAL'], ['hard', 'HARD']], PROFILE.diff)}</div>
-      <div class="sec"><label>MODE</label>${seg('data-mode', [['versus', 'VERSUS AI'], ['training', 'TRAINING']], PROFILE.mode)}</div>`;
-    const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${PROFILE.opp.char === 'kazan' ? 'MAGMA' : PROFILE.opp.char === 'rakan' ? 'STONE' : PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
+      <div class="sec"><label>MODE</label>${seg('data-mode', [['versus', '1 VS 1'], ['duo', '2 VS 2'], ['rumble', 'RUMBLE'], ['training', 'TRAINING']], PROFILE.mode)}</div>
+      ${PROFILE.mode === 'duo' ? `<div class="sec"><label>YOUR ALLY (AI)</label>${seg('data-ac', oppChars, (PROFILE.ally && PROFILE.ally.char) || 'random')}<p class="note" style="margin-top:4px">2 vs 2 on a larger arena — you and your ally against two AI fighters. A second random opponent joins the one picked above.</p></div>` : ''}
+      ${PROFILE.mode === 'rumble' ? `<div class="sec"><label>RUMBLE</label><p class="note">Three fighters, everyone against everyone, on a larger arena. A random third fighter joins. Last one standing wins the round — if you fall, the round is lost.</p></div>` : ''}`;
+    const modeTag = PROFILE.mode === 'duo' ? '2 VS 2 · ' : PROFILE.mode === 'rumble' ? 'RUMBLE · ' : '';
+    const oppTxt = PROFILE.mode === 'training' ? 'TRAINING DUMMY' : modeTag + `${PROFILE.opp.char === 'random' ? 'RANDOM' : PROFILE.opp.char.toUpperCase()} · ${CHAR_EL[PROFILE.opp.char] ? CHAR_EL[PROFILE.opp.char][1].split(' ')[0] : PROFILE.opp.el === 'random' ? 'RANDOM' : EL[PROFILE.opp.el].name.toUpperCase()} · ${PROFILE.diff.toUpperCase()}`;
     playFoot('PLAY', oppTxt);
   } else if (LOBBY.nav === 'chars') {
     H.textContent = 'CHARACTERS';
@@ -2825,7 +3211,7 @@ function renderLobby() {
       const eq = c.id === PROFILE.char, frm = eq ? 'card_green' : c.available ? 'card_gold' : 'card_gray';
       const art = c.img ? `<div class="art" style="background-image:url(${c.img})"></div>` : `<div class="sil">${SIL_SVG}</div>`;
       const tag = eq ? '<span class="tag eq">EQUIPPED</span>' : c.available ? '<span class="tag">SELECT</span>' : '<span class="tag">🔒 COMING SOON</span>';
-      return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? (c.id === 'rakan' ? 'earth' : 'fire') : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
+      return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? CHAR_EL[c.id][0] : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
     }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">More fighters are on the way. Locked fighters can’t be picked and never appear as a random opponent.</p>`;
     F.innerHTML = '';
   } else if (LOBBY.nav === 'inv') {
@@ -2848,6 +3234,7 @@ function renderLobby() {
   B.querySelectorAll('[data-el]').forEach(b => b.onclick = () => setElement(b.dataset.el));
   B.querySelectorAll('[data-oe]').forEach(b => b.onclick = () => { PROFILE.opp.el = b.dataset.oe; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-oc]').forEach(b => b.onclick = () => { if (b.dataset.locked) { toast('Coming soon'); return; } PROFILE.opp.char = b.dataset.oc; saveProfile(); Sfx.play('select'); renderLobby(); });
+  B.querySelectorAll('[data-ac]').forEach(b => b.onclick = () => { if (b.dataset.locked) { toast('Coming soon'); return; } (PROFILE.ally = PROFILE.ally || {}).char = b.dataset.ac; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { PROFILE.diff = b.dataset.d; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { PROFILE.mode = b.dataset.mode; saveProfile(); Sfx.play('select'); renderLobby(); });
   B.querySelectorAll('[data-char]').forEach(b => b.onclick = () => { const c = ROSTER.find(x => x.id === b.dataset.char); if (!c.available) { toast('Coming soon'); return; } selectChar(c.id); });
@@ -2865,6 +3252,33 @@ function renderTab() {
     const E = PROFILE.char === 'kazan' ? [['victory', 'VICTORY'], ['victory2', 'FIST PUMP'], ['hurricane', 'ROAR OF MAGMA'], ['power_up', 'EMBER BREATH'], ['kick', 'KICK']] : [['victory', 'VICTORY'], ['victory2', 'TRIUMPH'], ['power_up', 'POWER UP'], ['hurricane', 'WHIRLWIND']];
     P.innerHTML = `<h4>EMOTES</h4><div class="strip">${E.filter(e => hero.rig.glb && hero.rig.glb.actions[e[0]]).map(([c, t]) => `<button class="gbtn emo" data-emo="${c}">${t}</button>`).join('')}</div>`;
     P.querySelectorAll('[data-emo]').forEach(b => b.onclick = () => playEmote(b.dataset.emo));
+  } else if (LOBBY.tab === 'details' && PROFILE.char === 'sira') {
+    P.innerHTML = `<h4>SIRA · FROST KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
+      <tr><td>Health</td><td>duelist</td><td class="n">${SR.hp} · speed +15% · combo +15%</td></tr>
+      <tr><td>Water attack</td><td>tap ×3</td><td class="n">${BAL.basic.dmg.join(' · ')}</td></tr>
+      <tr><td>Blade Dance</td><td>3 cuts</td><td class="n">${SR.combo.join(' · ')} · 3rd chills a Wet foe</td></tr>
+      <tr><td>${SR.s1.name}</td><td>Skill 1</td><td class="n">${SR.s1.dmg} dmg dash-cut · ${SR.s1.cd}s</td></tr>
+      <tr><td>${SR.s2.name}</td><td>Skill 2</td><td class="n">${SR.s2.dmg} dmg · freezes Wet · ${SR.s2.cd}s</td></tr>
+      <tr><td>${SR.su.name}</td><td>Super</td><td class="n">${SR.su.cuts.join(' + ')} = 200</td></tr></table>
+      <div class="perk"><b>PERK — FLOWING WATER:</b> ${SIRA_PERK_TEXT}</div>`;
+  } else if (LOBBY.tab === 'details' && PROFILE.char === 'rayn') {
+    P.innerHTML = `<h4>RAYN · FLAME KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
+      <tr><td>Health</td><td>swordsman</td><td class="n">${RY.hp}</td></tr>
+      <tr><td>Fire attack</td><td>tap ×3</td><td class="n">${BAL.basic.dmg.join(' · ')}</td></tr>
+      <tr><td>Three Cuts</td><td>sword</td><td class="n">${RY.combo.join(' · ')} · 3rd grants an Ember</td></tr>
+      <tr><td>${RY.s1.name}</td><td>Skill 1</td><td class="n">${RY.s1.dmg} (${RY.s1.ignDmg} ignited) · ${RY.s1.cd}s</td></tr>
+      <tr><td>${RY.s2.name}</td><td>Skill 2</td><td class="n">burning blade ${RY.s2.dur}s (+1s/Ember) · ${RY.s2.cd}s</td></tr>
+      <tr><td>${RY.su.name}</td><td>Super</td><td class="n">${RY.su.dmg} + burn ${RY.su.burn}</td></tr></table>
+      <div class="perk"><b>PERK — BLADE EMBER:</b> ${RAYN_PERK_TEXT}</div>`;
+  } else if (LOBBY.tab === 'details' && PROFILE.char === 'master') {
+    P.innerHTML = `<h4>ELEMENTAL MASTER <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
+      <tr><td>Health</td><td>energy ${MM.energy.max}</td><td class="n">${BAL.chars.master.hp} · regen ${MM.energy.regen}/s</td></tr>
+      <tr><td>Elements</td><td>six</td><td class="n">🔥 💧 🪨 🌪️ ❄️ ⚡ — U switches, 1-6 direct</td></tr>
+      <tr><td>Skill 1</td><td>${MM.s1.cost} energy</td><td class="n">per element · ${MM.s1.cd}s shared</td></tr>
+      <tr><td>Skill 2</td><td>${MM.s2.cost} energy</td><td class="n">per element · ${MM.s2.cd}s shared</td></tr>
+      <tr><td>Fusion</td><td>${MM.fuse.cost} energy</td><td class="n">seal + different element · 15 combos · 14s</td></tr>
+      <tr><td>${MM.su.name}</td><td>Super</td><td class="n">${MM.su.waves.join(' + ')} = 230</td></tr></table>
+      <div class="perk"><b>HOW TO FUSE:</b> land a skill → its seal is stored 5 s → switch element → press <b>P</b> (the ✦ button on phone).</div>`;
   } else if (LOBBY.tab === 'details' && PROFILE.char === 'rakan') {
     P.innerHTML = `<h4>RAKAN · STONE KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
       <tr><td>Health</td><td>giant</td><td class="n">${RK.hp} · −${Math.round(RK.baseDR * 100)}% damage taken</td></tr>
@@ -2929,7 +3343,7 @@ let INSTALL_EVT = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EVT = e; const b = $('#installBtn'); if (b) b.style.display = ''; });
 addEventListener('appinstalled', () => { INSTALL_EVT = null; const b = $('#installBtn'); if (b) b.style.display = 'none'; toast('Installed — open it from your home screen'); });
 function setupInstall() {
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => { });
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => { });
   const b = $('#installBtn'); if (!b || STANDALONE) return;
   const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (iOS || INSTALL_EVT) b.style.display = '';
@@ -2953,16 +3367,17 @@ function frame(rdt) {
   game.time += dt;
   if (!paused) {
     if (['intro', 'fight', 'ko'].includes(game.state)) {
+      for (const f of FIGHTERS) { const nt = pickTarget(f); if (nt) f.target = nt; }
+      if (hero.target && hero.target !== enemy) { enemy = hero.target; syncRightBar(enemy); }
       if (window.__heroAI) window.__heroAI.update(dt, enemy); else if (game.state === 'fight') readPlayerIntent(); else hero.intent = hero.blankIntent();
-      if (ai && !window.__aiOff) ai.update(dt, hero); else enemy.intent = enemy.blankIntent();
-      hero.update(dt, enemy); enemy.update(dt, hero);
-      const d = _v1.copy(enemy.pos).sub(hero.pos).setY(0), l = d.length();
-      if (l < .8 && Math.abs(enemy.pos.y - hero.pos.y) < 1.5) { d.normalize().multiplyScalar((.8 - l) / 2); hero.pos.sub(d); enemy.pos.add(d); }
+      for (const f of FIGHTERS) { if (f === hero) continue; if (f.ai && !window.__aiOff && f.hp > 0) f.ai.update(dt, f.target || hero); else f.intent = f.blankIntent(); }
+      for (const f of FIGHTERS) f.update(dt, f.target || (f === hero ? enemy : hero));
+      for (let i = 0; i < FIGHTERS.length; i++) for (let j = i + 1; j < FIGHTERS.length; j++) { const A = FIGHTERS[i], B = FIGHTERS[j]; if (A.hp <= 0 || B.hp <= 0) continue; const d = _v1.copy(B.pos).sub(A.pos).setY(0), l = d.length(); if (l < .8 && Math.abs(B.pos.y - A.pos.y) < 1.5) { d.normalize().multiplyScalar((.8 - l) / 2); A.pos.sub(d); B.pos.add(d); } }
       updateProjectiles(dt); updateLava(dt);
       for (let i = TIMERS.length - 1; i >= 0; i--) { TIMERS[i].t -= dt; if (TIMERS[i].t <= 0) { const f = TIMERS[i].fn; TIMERS.splice(i, 1); f(); } }
       updateFlow(game.state === 'ko' ? rdt : dt); updateCamera(rdt); hudUpdate(rdt); CAM.focusT -= dt;
     } else if (game.state === 'menu') lobbyFrame(rdt);
-    else if (game.state === 'end') { hero.animate(rdt, enemy); enemy.animate(rdt, hero); }
+    else if (game.state === 'end') { for (const f of FIGHTERS) f.animate(rdt, f === hero ? enemy : hero); }
     PADD.update(dt || rdt * .05); PNORM.update(dt || rdt * .05); DEBRIS.update(dt); updateTweens(dt); updateDmg(rdt); updateDecals(dt); updateFlipbooks(dt || rdt * .2); updateBolts(dt || rdt * .2);
     if (SKY_FLASH > 0) { SKY_FLASH = Math.max(0, SKY_FLASH - rdt * 5); } renderer.toneMappingExposure = 1.05 + SKY_FLASH * .7;
     for (const b of ARENA.braziers) { FX.fire(b.pos, 2, .3, null, 1.3); if (b.light) b.light.intensity = 30 + Math.sin(game.time * 13 + b.ph) * 5 + Math.sin(game.time * 7.3 + b.ph) * 4; b.glow.material.opacity = .45 + Math.sin(game.time * 11 + b.ph) * .08; }
@@ -2988,16 +3403,19 @@ function frame(rdt) {
     loadFlipbooks(p => { PR.f = p; bar(); }, ['fire_loop']).then(() => { PR.f = 1; bar(); }),
   ]);
   $('#loadTxt').textContent = 'Building the arena…'; await new Promise(r => setTimeout(r, 30));
-  buildArena();
+  ARENA.grp = new THREE.Group(); scene.add(ARENA.grp);
+  { const _add = scene.add.bind(scene); scene.add = (...o) => { ARENA.grp.add(...o); return scene; }; try { buildArena(); } finally { scene.add = _add; } }
+  if (ARENA.sun) { scene.attach(ARENA.sun); if (ARENA.sun.target) scene.attach(ARENA.sun.target); }
+  OBS0 = OBS.map(o => [o, { x: o.x, z: o.z, r: o.r, hw: o.hw, hd: o.hd }]);
   PADD = new PSys(IS_TOUCH ? 1600 : 2600, THREE.AdditiveBlending); PNORM = new PSys(IS_TOUCH ? 500 : 900, THREE.NormalBlending);
   DEBRIS = new Debris(70);
   setupComposer(); onResize();
   $('#loadTxt').textContent = 'Preparing fighters…'; $('#loadBar').style.width = '96%'; await new Promise(r => setTimeout(r, 30));
   initLobby(); toLobby(); window.__booted = true;
-  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan').then(() => loadCharGLB('rakan')), 400)); // effects, then Kazan, download in the background while you are in the lobby
+  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan').then(() => loadCharGLB('rakan')).then(() => loadCharGLB('sira')).then(() => loadCharGLB('rayn')).then(() => loadSword('ice')).then(() => loadSword('fire')), 400)); // effects, then Kazan, download in the background while you are in the lobby
   if (PROFILE.char !== 'raven') { const want = PROFILE.char; PROFILE.char = 'raven'; selectChar(want); }
   setupInstall();
   $('#loading').classList.add('hidden');
-  window.__game = { game, get hero() { return hero; }, get enemy() { return enemy; }, startMatch, beginMatch, ensureChars, LAVA, TELES, toLobby, renderLobby, LOBBY, PROFILE, AB, BAL, AI, CAM, KEYS, PRESSED, TOUCH, PROJ, OBS, SETTINGS, renderer, step(n, keys = []) { for (let i = 0; i < n; i++) { keys.forEach(k => PRESSED.add(k)); keys = []; frame(1 / 60); } }, cam(p, l) { DEBUG_CAM = p ? [new V3(...p), new V3(...l)] : null; } };
+  window.__game = { game, get hero() { return hero; }, get enemy() { return enemy; }, get FIGHTERS() { return FIGHTERS; }, setWorldScale, pickTarget, startMatch, beginMatch, ensureChars, LAVA, TELES, toLobby, renderLobby, LOBBY, PROFILE, AB, BAL, AI, CAM, KEYS, PRESSED, TOUCH, PROJ, OBS, SETTINGS, renderer, step(n, keys = []) { for (let i = 0; i < n; i++) { keys.forEach(k => PRESSED.add(k)); keys = []; frame(1 / 60); } }, cam(p, l) { DEBUG_CAM = p ? [new V3(...p), new V3(...l)] : null; } };
   loop();
 })();

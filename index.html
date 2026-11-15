@@ -174,6 +174,9 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
 .wins{display:flex;gap:5px}
 .wins b{width:11px;height:11px;border-radius:50%;border:1.5px solid #6fc6ff;background:rgba(0,0,0,.5);display:block}
 .wins b.on{background:radial-gradient(circle,#e6f7ff,#3aa0ff);box-shadow:0 0 8px #3aa0ff}
+.en{width:62%;height:6px;background:#0a1410;border:1px solid #3fbf86;border-radius:3px;overflow:hidden}
+.en i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#1f6b4a,#7dffc0)}
+.pbar.right .en i{float:right}
 .stats{display:flex;gap:4px;min-height:22px}
 .pbar.right .stats{flex-direction:row-reverse}
 .st{position:relative;width:22px;height:22px;border-radius:50%;background:center/contain no-repeat;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
@@ -196,6 +199,13 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
 #dmgLayer{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:7}
 .dmg{position:absolute;font-family:'Cinzel',serif;font-weight:900;font-size:26px;color:#fff;text-shadow:0 0 6px #000,0 2px 0 #000;transform:translate(-50%,-50%);white-space:nowrap}
 #enemyMark{position:fixed;left:0;top:0;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:13px solid #ff3a2a;filter:drop-shadow(0 0 4px rgba(255,40,20,.9)) drop-shadow(0 2px 2px #000);pointer-events:none;z-index:7;margin:-13px 0 0 -9px}
+#obars{position:absolute;inset:0;pointer-events:none;z-index:6}
+#obars .ob{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;gap:2px;will-change:transform}
+#obars .ob b{font-size:10px;letter-spacing:.08em;color:#ffd9c9;text-shadow:0 1px 3px #000;white-space:nowrap;font-weight:700}
+#obars .ob i{width:52px;height:5px;border-radius:3px;background:rgba(0,0,0,.55);border:1px solid rgba(0,0,0,.6);overflow:hidden;display:block}
+#obars .ob s{display:block;height:100%;background:linear-gradient(90deg,#ff6a4a,#ffb24a)}
+#obars .ob.ally b{color:#c9ffd9}
+#obars .ob.ally s{background:linear-gradient(90deg,#49d66b,#aef09a)}
 #offArrow{position:fixed;left:0;top:0;font-size:30px;color:#ff5a40;text-shadow:0 0 10px #000;pointer-events:none;display:none;margin:-15px 0 0 -15px;z-index:9}
 #trainInfo{position:fixed;left:50%;top:90px;transform:translateX(-50%);z-index:8;pointer-events:none;font-family:'Cinzel',serif;font-size:13px;letter-spacing:.08em;color:#e8dcc0;text-shadow:0 1px 3px #000;text-align:center}
 
@@ -281,6 +291,7 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
       <div class="pname">You</div>
       <div class="hp"><i class="trail"></i><i class="fill"></i><b></b></div>
       <div class="meters"><div class="sp"><i></i></div><div class="wins"><b></b><b></b></div></div>
+      <div class="en hidden"><i></i></div>
       <div class="stats"></div>
     </div>
   </div>
@@ -291,6 +302,7 @@ kbd{display:inline-block;min-width:20px;text-align:center;padding:0 5px;border:1
       <div class="pname">Opponent</div>
       <div class="hp"><i class="trail"></i><i class="fill"></i><b></b></div>
       <div class="meters"><div class="sp"><i></i></div><div class="wins"><b></b><b></b></div></div>
+      <div class="en hidden"><i></i></div>
       <div class="stats"></div>
     </div>
   </div>
