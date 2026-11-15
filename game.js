@@ -3119,7 +3119,7 @@ function updateHazards(dt) {
 }
 
 // ===================== PROGRESSION =====================
-const UNLOCK = { raven: null, sira: null, kazan: null, rayn: { lvl: 3, coins: 600 }, rakan: { lvl: 5, coins: 900 }, master: { lvl: 8, coins: 1500 } };
+const UNLOCK = { raven: null, sira: null, kazan: null, rayn: null, rakan: null, master: null }; // every fighter is free and complete
 const PROG = PROFILE.prog = Object.assign({ xp: 0, lvl: 1, coins: 0, owned: ['raven', 'sira', 'kazan'], towerBest: 0, wins: 0, played: 0 }, PROFILE.prog || {});
 const xpNeed = L => 150 + 100 * (L - 1);
 const owns = id => !UNLOCK[id] || PROG.owned.includes(id) || PROG.lvl >= UNLOCK[id].lvl;
@@ -3444,7 +3444,7 @@ function renderLobby() {
       const own = owns(c.id), U = UNLOCK[c.id];
       const tag = eq ? '<span class="tag eq">EQUIPPED</span>' : !c.available ? '<span class="tag">🔒 COMING SOON</span>' : own ? '<span class="tag">SELECT</span>' : `<span class="tag lock">🔒 LV ${U.lvl} · ${U.coins} 🪙</span>`;
       return `<div class="ccard ${c.available ? '' : 'locked'} ${c.legendary ? 'legendary' : ''}" data-char="${c.id}">${art}${c.img ? '' : `<div class="nm">${c.name.toUpperCase()}</div>`}<div class="frm" style="background-image:${ICON(frm)}"></div>${eq ? `<div class="ico" style="background-image:${elIcon(c.fixedEl ? CHAR_EL[c.id][0] : PROFILE.el)}"></div>` : ''}${c.legendary ? '<span class="legTag">★ LEGENDARY</span>' : ''}${tag}</div>`;
-    }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">Locked fighters 🔒 unlock when you reach their level — or buy them early with coins 🪙 earned in every match and on every Tower floor. You can still meet them as opponents.</p>`;
+    }).join('')}</div><p class="note" style="margin-top:10px"><b>${ch.name}</b> — ${ch.about}</p><p class="note" style="margin-top:4px;opacity:.75">Every fighter is free and fully unlocked.</p>`;
     F.innerHTML = '';
   } else if (LOBBY.nav === 'inv') {
     H.textContent = 'INVENTORY';
