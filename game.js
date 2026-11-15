@@ -1037,9 +1037,9 @@ function buildRavenKits() {
       pref: U.pref, speed: BAL.moveSpeed * MOBILITY[el].speed, aggr: .75, blockP: .45, jumpP: MOBILITY[el].jumpP, airJumps: MOBILITY[el].airJumps, glide: MOBILITY[el].glide, armor: 1, heal: 0 };
   }
 }
-const MASTER_KIT = { name: 'All', basic: null, btn: [['mswap', 'Element'], ['m1', 'Skill 1'], ['m2', 'Skill 2']], superAb: 'm_su', fuse: 'mfuse', superR: [2, 12],
-  desc: 'Commands all <b>six</b> elements — fire, water, earth, wind, ice and lightning. Land a skill to store its <b>seal</b>, switch element, then press <b>Fusion</b> to combine the two (15 fusions). Energy: 100, regen 8/s.',
-  moves: [['m1', .5, 3, 2, 18], ['m2', .8, 2.4, 0, 12]],
+const MASTER_KIT = { name: 'All', basic: 'mb', btn: [['mb', 'Element Attack'], ['m1', 'Skill 1'], ['m2', 'Skill 2']], superAb: 'm_su', fuse: 'mfuse', superR: [2, 12],
+  desc: 'Commands all <b>six</b> elements. Normal attack (tap ×3): current element, then both, then a <b>fusion shot</b> of the current and the previous element. Every element has its <b>own</b> two skills with their own cooldowns — switch element to fire fresh ones. <b>Fusion</b> combines the last two elements you used (15 fusions).',
+  moves: [['mb', .15, 3, 2.5, 18], ['m1', .5, 3, 2, 18], ['m2', .8, 2.4, 0, 12], ['mfuse', .9, 2, 0, 14]],
   pref: 6, speed: 6.4, aggr: .8, blockP: .5, jumpP: .35, airJumps: 1, glide: true, armor: 1 };
 
 // ---------------------------------------------------------------- PROJECTILES
@@ -1074,8 +1074,9 @@ function killProj(p, fx = true) {
   if (p.fbh) { for (const h of p.fbh) if (h) h.life = Math.min(h.life, h.t + .15); p.fbh = null; }
   if (p.mesh) { scene.remove(p.mesh); if (p.kind !== 'ball') p.mesh.traverse(o => { if (o.isMesh) { o.geometry.dispose(); if (!MATS.rocks.includes(o.material)) o.material.dispose(); } else if (o.isSprite) o.material.dispose(); }); }
   if (fx && p.aoe) {
-    const a = p.aoe, c = p.pos.clone(); FX.burst(c, a.el, 30, 7, 1.4); FX.burst(c, 'water', 16, 5, 1.2); Sfx.play('lightning'); shake(.3);
-    for (let i = 0; i < 7; i++) { const e = c.clone().add(_v1.randomDirection().multiplyScalar(a.r)); e.y = Math.max(e.y, groundAt(e.x, e.z) + .1); boltFX(c, e, 0xb59cff, .07, .25); }
+    const a = p.aoe, c = p.pos.clone(); FX.burst(c, a.el, 30, 7, 1.4); shake(.3);
+    if (a.el === 'lightning') { FX.burst(c, 'water', 16, 5, 1.2); Sfx.play('lightning'); for (let i = 0; i < 7; i++) { const e = c.clone().add(_v1.randomDirection().multiplyScalar(a.r)); e.y = Math.max(e.y, groundAt(e.x, e.z) + .1); boltFX(c, e, 0xb59cff, .07, .25); } }
+    else { impactFX(a.el, c, true, 1.3); Sfx.play(a.el === 'ice' ? 'water' : a.el); }
     for (const tgt of opps(p.owner)) if (capsuleDist(c, tgt) < a.r && !tgt.ghost()) applyHit(p.owner, tgt, { dmg: a.dmg, kb: 4, stun: a.stun, el: a.el, from: c });
   }
   if (fx && p.kind === 'ball') {
@@ -1388,7 +1389,7 @@ function updateProjectiles(dt) {
     if (w.hp <= 0 || w.t > w.life) { if (w.personal && w.owner.blockWall === w) w.owner.blockWall = null; FX.burst(w.pos.clone().setY(w.pos.y + 1), 'earth', 30, 6, 1.5); Sfx.play('earth'); for (let k = 0; k < 12; k++) DEBRIS.spawn(w.pos.clone().setY(w.pos.y + rand(.3, 2.3)), _v1.randomDirection().multiplyScalar(rand(2, 6)).setY(rand(2, 6)), rand(1, 2.4)); scene.remove(w.mesh); w.mesh.geometry.dispose(); WALLS.splice(i, 1); }
   }
 }
-const HX = p => ({ skill: p.skill, castId: p.castId, slowPct: p.slowPct, seal: p.seal, freeze: p.freeze, root: p.root, needle: p.needle });
+const HX = p => ({ skill: p.skill, castId: p.castId, slowPct: p.slowPct, seal: p.seal, freeze: p.freeze, root: p.root, needle: p.needle, wet: p.wet });
 function wallHit(w, pos, r) { _v4.copy(pos).sub(w.pos); const along = _v4.dot(w.dir); const sx = w.dir.z, sz = -w.dir.x; const side = _v4.x * sx + _v4.z * sz; return Math.abs(along) < .3 + r && Math.abs(side) < w.half + r * .5 && _v4.y < 2.5 && w.t > .15; }
 function clash(a, b) {
   let win = null;
@@ -1683,6 +1684,55 @@ function buildBasics() {
   B('magma2', s2, { el: 'earth', anim: 'rapid', cd: C[1], hint: 'Lava Shards', fn(f, t) { pair(f, t, { el: 'fire', speed: 27, radius: .34, kb: 2.5, vis: 'railrock', life: 1.6, y: 1.25 }); Sfx.play('earth'); Sfx.play('fire'); } });
   B('magma3', s3, { el: 'fire', clip: 'magic_area', anim: 'hammer', speed: 2.2, cd: C[2], hint: 'Magma Boulder', fn(f, t) { const p = frontPos(f, 1.2, -.4); spawnBall(f, t, { el: 'fire', pos: p, speed: 19, radius: .75, dmg: D[2], kb: 8, knockdown: true, rise: .14, riseTo: 1.4, vis: 'rock', life: 2.2, trail: 'fire_loop', trailSize: 1.6 }); FX.earth(p.clone().setY(f.pos.y + .1), 12, .7); Sfx.play('earth'); Sfx.play('fire'); shake(.2); } });
 }
+const MB_VIS = { fire: ['fire', 'fire_loop'], water: ['water', 'water_orb'], earth: ['rock', 'rocks_float'], wind: ['wind', 'tornado'], ice: ['ice_needle', 'ice_orb'], lightning: ['bolt', 'lightning_orb'] };
+const MB_EXTRA = { fire: { burn: 2 }, water: { kb: 8 }, earth: { knockdown: true }, wind: { launch: 6 }, ice: { slow: 1.4, slowPct: .3 }, lightning: { stun: .3 } };
+function mbPrev(f) { return f.prevEl && f.prevEl !== f.melEl ? f.prevEl : (f.melEl === 'lightning' ? 'fire' : 'lightning'); }
+function mbShot(f, t, el, o) { const v = MB_VIS[el]; return spawnBall(f, t, Object.assign({ el, pos: frontPos(f, .9, 1.35), speed: el === 'lightning' ? 46 : el === 'earth' ? 24 : 30, radius: el === 'wind' ? .6 : .38, kb: 3, vis: v[0], life: 1.8 }, o)); }
+function buildMasterBasics() {
+  const D = BAL.basic.dmg, C = BAL.basic.cd; // ×dmgMul is applied in applyHit
+  const B = (name, o) => def(name, Object.assign({ basic: true, power: 1 }, o));
+  B('mb', { el: 'fire', anim: 'punch', clip: 'magic1h3', hit: .16, speed: 2.8, dur: .4, cd: C[0], hint: 'Element Shot', fn(f, t) { const el = f.melEl; mbShot(f, t, el, { dmg: D[0] }); Sfx.play(el === 'ice' ? 'water' : el); } });
+  B('mb2', { el: 'fire', anim: 'rapid', clip: 'magic1h', hit: .18, speed: 2.8, dur: .45, cd: C[1], hint: 'Twin Elements', fn(f, t) { const a = f.melEl, b = mbPrev(f);
+    mbShot(f, t, a, { dmg: D[1] / 2, spread: -.08 }); later(.1, () => mbShot(f, t, b, { dmg: D[1] / 2, spread: .08 })); Sfx.play(a === 'ice' ? 'water' : a); } });
+  B('mb3', { el: 'fire', anim: 'burst', clip: 'magic2h2', hit: .26, speed: 2.2, dur: .62, cd: C[2], power: 2, hint: '', fn(f, t) {
+    const a = f.melEl, b = mbPrev(f), name = FUSE[fuseKey(a, b)] || 'Fusion';
+    const p = mbShot(f, t, a, Object.assign({ dmg: D[2], radius: .55, big: true, speed: 30, trail: MB_VIS[b][1], trailSize: 1.3, aoe: { r: 2.4, dmg: 18, el: b, stun: 0 } }, MB_EXTRA[b]));
+    if (f.isPlayer) popText(f.pos.clone().setY(f.pos.y + 2.3), name.toUpperCase() + ' SHOT', '#ffe9a0', 18);
+    Sfx.play('chain'); Sfx.play(b === 'ice' ? 'water' : b); return p; } });
+}
+// a line of filmed structures racing along the ground (ice spikes / fire wall); hits each opponent once
+function groundLine(f, t, o) {
+  const fw = fwdOf(f), cid = f.castId, hit = new Set();
+  for (let i = 0; i < o.n; i++) later(i * o.gap, () => {
+    if (game.state !== 'fight' && game.state !== 'ko') return;
+    const P = f.pos.clone().addScaledVector(fw, o.start + i * o.step); const r = Math.hypot(P.x, P.z); if (r > CFG.ARENA_R) return; P.y = groundAt(P.x, P.z, f.pos.y + .3);
+    fb(o.fx, { pos: P.clone().setY(P.y + (o.fxY || 0)), size: o.size, mode: 'up', speed: o.fxSpeed || 1.4, boost: o.boost || 1, tint: o.tint });
+    if (o.decal && i % 2 === 0) decal(P, o.decal, 1.8);
+    if (o.sfx && i % 2 === 0) Sfx.play(o.sfx);
+    for (const T of opps(f)) { if (hit.has(T) || T.ghost()) continue; if (Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < o.w && T.pos.y - P.y < 2.2) { hit.add(T); applyHit(f, T, Object.assign({ dmg: o.dmg, from: P.clone(), el: o.el, castId: cid, proj: true }, o.hit)); } }
+  });
+}
+function buildBladeBasics() {
+  const D = BAL.basic.dmg, C = BAL.basic.cd;
+  const B = (name, o) => def(name, Object.assign({ basic: true, power: 1 }, o));
+  // ---- Sira — FROST BLADE: the sword throws the cold (her own slashes, not Raven's water casts)
+  B('frost', { el: 'ice', clip: 'jab2', anim: 'sweep', hit: .2, speed: 2.4, dur: .42, cd: C[0], hint: 'Frost Slash', fn(f, t) {
+    spawnBall(f, t, { el: 'ice', pos: frontPos(f, 1, 1.2), speed: 31, radius: .85, dmg: D[0], kb: 3, life: .9, vis: 'crescent', trail: 'ice_orb', trailSize: .8, slow: .6, slowPct: .15 }); Sfx.play('swing'); Sfx.play('water'); } });
+  B('frost2', { el: 'ice', clip: 'cross', anim: 'sweep', hit: .2, speed: 2.4, dur: .45, cd: C[1], hint: 'Twin Ice Shards', fn(f, t) {
+    for (const [sp, dl] of [[-.1, 0], [.1, .08]]) later(dl, () => spawnBall(f, t, { el: 'ice', pos: frontPos(f, .9, 1.3), speed: 36, radius: .34, dmg: D[1] / 2, kb: 1.5, spread: sp, life: 1, vis: 'ice_needle', wet: true }));
+    Sfx.play('swing'); Sfx.play('lightning'); } });
+  B('frost3', { el: 'ice', clip: 'kick2', anim: 'hammer', hit: .28, speed: 2, dur: .62, cd: C[2], power: 2, hint: 'Glacier Line', fn(f, t) {
+    groundLine(f, t, { n: 6, gap: .05, start: 1.6, step: 1.45, w: 1.15, dmg: D[2], el: 'ice', fx: 'ice_spike', size: [1.7, 2.1], fxSpeed: 1.5, sfx: 'water', hit: { kb: 4, launch: 4, slow: 1.2, slowPct: .25, heavy: true } }); Sfx.play('clash'); shake(.3); } });
+  // ---- Rayn — FLAME BLADE: arcs of fire cut from the great sword
+  B('ember', { el: 'fire', clip: 'jab2', anim: 'sweep', hit: .24, speed: 2.2, dur: .45, cd: C[0], hint: 'Flame Slash', fn(f, t) {
+    spawnBall(f, t, { el: 'fire', pos: frontPos(f, 1, 1.15), speed: 28, radius: .95, dmg: D[0] + (f.igniteT > 0 ? 5 : 0), kb: 3.5, life: .9, vis: 'crescent', trail: 'fire_loop', trailSize: 1, burn: 1 }); Sfx.play('swing'); Sfx.play('fire'); } });
+  B('ember2', { el: 'fire', clip: 'cross', anim: 'sweep', hit: .24, speed: 2.2, dur: .48, cd: C[1], hint: 'Cross Fire', fn(f, t) {
+    for (const [sp, dl] of [[-.13, 0], [.13, .07]]) later(dl, () => spawnBall(f, t, { el: 'fire', pos: frontPos(f, 1, 1.0 + dl * 4), speed: 30, radius: .8, dmg: D[1] / 2 + (f.igniteT > 0 ? 3 : 0), kb: 2.5, spread: sp, life: .85, vis: 'crescent', trail: 'fire_loop', trailSize: .8 }));
+    Sfx.play('swing'); Sfx.play('fire'); } });
+  B('ember3', { el: 'fire', clip: 'kick2', anim: 'hammer', hit: .3, speed: 1.9, dur: .66, cd: C[2], power: 2, hint: 'Blazing Arc', fn(f, t) {
+    groundLine(f, t, { n: 6, gap: .045, start: 1.5, step: 1.4, w: 1.1, dmg: D[2] + (f.igniteT > 0 ? 10 : 0), el: 'fire', fx: 'fire_wall', size: [1.9, 1.9], fxY: .9, fxSpeed: 1.6, boost: 1.1, decal: 'scorch', sfx: 'fire', hit: { kb: 6, launch: 3, burn: 2, heavy: true } }); shake(.35); } });
+}
+const cdKeyOf = (f, name) => { const a = AB[name]; if (f && f.isMaster && (name === 'm1' || name === 'm2')) return name + '_' + f.melEl; return (a && a.slot) || name; };
 const isBasic = (f, name) => !!name && (ELS.includes(name) || (f.kit && name === f.kit.basic));
 // ---------------------------------------------------------------- RAKAN — Guardian of the Mountain (legendary; numbers from the user's sheet)
 BAL.chars.rakan = { hp: 1100, speedMul: 1, dashCD: 2.5, dashMul: .85, combo: [30, 40, 55], height: 2.12, baseDR: .08,
@@ -1774,8 +1824,14 @@ function startShieldFX(f) {
     for (const [dx, dz, s] of [[0, 1.5, 2.4], [-1.2, 1, 1.9], [1.2, 1, 1.9]]) fb('ice_spike', { follow: relF(f, dx, .15, dz), size: [s, s * .95], mode: 'up', loop: true, speed: .8, opacity: .95 });
   } else if (bs === 'lightning') {
     fb('lightning_orb', { follow: relF(f, 0, 1.1, 0), size: 2.8, loop: true, opacity: .8, speed: 1.6 });
-  } else if (bs === 'all') {
-    fb('energy' in FLIP.tex ? 'energy' : 'lightning_orb', { follow: relF(f, 0, 1.1, 0), size: 2.6, loop: true, opacity: .5, speed: 1.4 });
+  } else if (bs === 'blade') { // Rayn: a burning parry — fire swirls round the great sword and a ring at his feet
+    fb('fire_ring', { follow: relF(f, 0, .12, 0), size: 3.4, loop: true, speed: 1.5, opacity: .95 });
+    fb('fire_loop', { follow: () => f.state === 'block' ? swordTip(f, .55) : null, size: 1.6, loop: true, speed: 1.6, boost: 1.2 });
+    fb('fire_burst', { follow: relF(f, 0, 1.2, 1.1), size: 2.2, loop: true, speed: 1.3, opacity: .8 });
+  } else if (bs === 'all') { // Master: the six elements orbit him as a guard
+    const SIX = [['fire_loop', 1], ['water_orb', 1.1], ['rocks_float', 1.1], ['tornado', 1.1], ['ice_orb', 1], ['lightning_orb', 1]];
+    SIX.forEach(([n, s], i) => fb(n, { follow: () => { if (f.state !== 'block') return null; const a = game.time * 2.4 + i * Math.PI / 3; return _sv.set(f.pos.x + Math.cos(a) * 1.25, f.pos.y + 1.05 + Math.sin(a * 2) * .15, f.pos.z + Math.sin(a) * 1.25); }, size: s, loop: true, speed: 1.6, opacity: .95 }));
+    fb('water_orb', { follow: relF(f, 0, 1.05, 0), size: 3.2, loop: true, opacity: .28, speed: 1.1, desat: 1, tint: 0xfff2c0 });
   }
 }
 // ---------------------------------------------------------------- SIRA — Frost Blade (fast duelist; numbers from the user's sheet)
@@ -1786,9 +1842,9 @@ BAL.chars.sira = { hp: 900, speedMul: 1.15, comboSpd: 1.15, dashCD: 1.0, combo: 
   su: { name: 'Frozen Mirror Dance', warn: .9, cuts: [55, 65, 80], slow: .25, slowDur: 2, len: 9.5, width: 2.4, recover: .5 } };
 const SR = BAL.chars.sira;
 const SIRA_PERK_TEXT = `Water-skill hits mark the enemy <b>Wet</b> for ${SR.flow.markDur} s and grant +${Math.round(SR.flow.haste * 100)}% speed for ${SR.flow.hasteDur} s (every ${SR.flow.icd} s). Winter Needle <b>freezes</b> a Wet enemy; the 3rd sword cut slows them instead.`;
-const SIRA_KIT = { name: 'Frost', basic: 'water', btn: [['water', 'Water Attack'], ['sr_s1', SR.s1.name], ['sr_s2', SR.s2.name]], superAb: 'sr_su', superR: [1, 8],
+const SIRA_KIT = { name: 'Frost', basic: 'frost', btn: [['frost', 'Frost Blade'], ['sr_s1', SR.s1.name], ['sr_s2', SR.s2.name]], superAb: 'sr_su', superR: [1, 8],
   desc: `<b>${SR.s1.name}</b> · <b>${SR.s2.name}</b> · Super: <b>${SR.su.name}</b><br>Perk: ${SIRA_PERK_TEXT}`,
-  moves: [['water', .15, 3, 2, 16], ['sr_s1', .7, 2.6, 2.5, 9], ['sr_s2', .8, 3, 3, 15]], pref: 3, speed: BAL.moveSpeed * 1.15, aggr: .85, blockP: .35, jumpP: .3, airJumps: 1, glide: false, armor: 1, heal: 0 };
+  moves: [['frost', .15, 3, 2, 16], ['sr_s1', .7, 2.6, 2.5, 9], ['sr_s2', .8, 3, 3, 15]], pref: 3, speed: BAL.moveSpeed * 1.15, aggr: .85, blockP: .35, jumpP: .3, airJumps: 1, glide: false, armor: 1, heal: 0 };
 function siraMark(att, tgt) {
   tgt.sts.wet = SR.flow.markDur; popText(tgt.pos.clone().setY(tgt.pos.y + 2.3), 'WET', '#9fd4ff', 17); fb('water_splash', { pos: tgt.pos.clone().setY(tgt.pos.y + 1.2), size: 1.8, speed: 2 });
   if ((att.icd.flow || 0) <= 0) { att.icd.flow = SR.flow.icd; att.sts.haste = SR.flow.hasteDur; popText(att.pos.clone().setY(att.pos.y + 2.3), 'FLOW', '#bfe9ff', 16); }
@@ -1827,10 +1883,10 @@ BAL.chars.rayn = { hp: 1000, speedMul: 1, dashCD: 1.2, combo: [30, 35, 50], heig
   su: { name: 'Sun Cleave', dmg: 190, burn: 15, burnDur: 3, warn: 1, len: 10, width: 2.6, recover: .7 } };
 const RY = BAL.chars.rayn;
 const RAYN_PERK_TEXT = `Landing the 3rd sword cut grants an <b>Ember</b> (max ${RY.ember.max}, ${RY.ember.dur} s). Igniting the blade consumes Embers: +1 s of burning blade each. While ignited: sword hits +${RY.s2.meleeBonus}, the 3rd cut burns, and the Crescent deals ${RY.s1.ignDmg}.`;
-const RAYN_KIT = { name: 'Flame', basic: 'fire', btn: [['fire', 'Fire Attack'], ['ry_s1', RY.s1.name], ['ry_s2', RY.s2.name]], superAb: 'ry_su', superR: [1, 8],
+const RAYN_KIT = { name: 'Flame', basic: 'ember', btn: [['ember', 'Flame Blade'], ['ry_s1', RY.s1.name], ['ry_s2', RY.s2.name]], superAb: 'ry_su', superR: [1, 8],
   desc: `<b>${RY.s1.name}</b> · <b>${RY.s2.name}</b> · Super: <b>${RY.su.name}</b><br>Perk: ${RAYN_PERK_TEXT}`,
-  moves: [['fire', .15, 3, 2, 16], ['ry_s1', .6, 3, 3, 14], ['ry_s2', 1.2, 1.6, 0, 3.5]], pref: 2.6, speed: BAL.moveSpeed, aggr: .9, blockP: .35, jumpP: .2, airJumps: 1, glide: false, armor: 1, heal: 0 };
-function swordTip(f, k = 1) { const s = f.rig.glb && f.rig.glb.sword; if (!s) return handPos(f, 'R'); return s.localToWorld(new V3(0, .95 * k, 0)); }
+  moves: [['ember', .15, 3, 2, 16], ['ry_s1', .6, 3, 3, 14], ['ry_s2', 1.2, 1.6, 0, 3.5]], pref: 2.6, speed: BAL.moveSpeed, aggr: .9, blockP: .35, jumpP: .2, airJumps: 1, glide: false, armor: 1, heal: 0 };
+function swordTip(f, k = 1) { const G = f.rig.glb, s = G && G.sword; if (!s) return handPos(f, 'R'); return s.localToWorld((G.swordTipLocal || new V3(0, 1, 0)).clone().multiplyScalar(.95 * k)); }
 function buildRaynKit() {
   def('ry_s1', { el: 'fire', clip: 'magic1h', anim: 'kick', hit: RY.s1.windup, speed: 1.4, dur: RY.s1.windup + .3, cd: RY.s1.cd, label: RY.s1.name,
     fn(f, t) { const ign = f.igniteT > 0; spawnBall(f, t, { el: 'fire', pos: frontPos(f, 1, 1.1), speed: 24, radius: 1.1, dmg: ign ? RY.s1.ignDmg : RY.s1.dmg, kb: 5, life: 1.1, vis: 'crescent', big: ign }); Sfx.play('fire'); Sfx.play('swing'); } });
@@ -1849,9 +1905,9 @@ function buildRaynKit() {
     } });
 }
 // ---------------------------------------------------------------- ELEMENTAL MASTER — six elements, seals & fusions (user's sheet)
-BAL.chars.master = { hp: 1000, speedMul: 1, dashCD: 1.2, combo: [30, 35, 45], height: 1.85,
-  energy: { max: 100, regen: 8, delay: 2 }, swapGap: .5,
-  s1: { cost: 15, cd: 6 }, s2: { cost: 25, cd: 11 }, fuse: { cost: 35, cd: 14 }, spD: .1, spT: .05,
+BAL.chars.master = { hp: 1100, speedMul: 1.05, dashCD: 1.1, combo: [32, 38, 50], height: 1.85, dmgMul: 1.1,
+  energy: { max: 100, regen: 8, delay: 2 }, swapGap: .12,
+  s1: { cost: 0, cd: 5 }, s2: { cost: 0, cd: 9 }, fuse: { cost: 0, cd: 8 }, spD: .1, spT: .05,
   su: { name: 'Union of the Six', warn: 1.2, waves: [60, 70, 100], radius: 3.8 } };
 const MM = BAL.chars.master;
 const M1 = { // skill 1 per element: [name, dmg, anim, extra]
@@ -1866,7 +1922,7 @@ function mSeal(f, el) { f.seal = { el, until: game.time + 5 }; if (f.isPlayer) p
 function buildMasterKit() {
   const chk = (f, cost) => { if (f.mana < cost) { if (f.isPlayer) { popText(f.pos.clone().setY(f.pos.y + 2.3), 'NO ENERGY', '#8fd0ff', 18); btnDenied('m1'); } return false; } return true; };
   // ---- skill 1 (shared slot m1)
-  def('m1', { slot: 'm1', el: 'fire', anim: 'punch', dur: .5, rel: .2, cd: MM.s1.cd, cost: MM.s1.cost, energy: true, label: null, fn(f, t) {
+  def('m1', { slot: 'm1', el: 'fire', anim: 'punch', clip: 'magic1h', speed: 2.2, hit: .2, dur: .5, rel: .2, cd: MM.s1.cd, cost: MM.s1.cost, energy: true, label: null, fn(f, t) {
     const el = f.melEl, cid = f.castId, S = (o) => Object.assign({ skill: true, castId: cid, seal: el }, o);
     if (el === 'fire') spawnBall(f, t, S({ el, pos: frontPos(f, .9, 1.35), speed: 30, radius: .42, dmg: 75, kb: 3, vis: 'fire', life: 2 }));
     else if (el === 'water') { waterWhip(f, t, 'R', 65, { skill: true, castId: cid, seal: 'water', slow: 1, slowPct: .15 }); }
@@ -1884,7 +1940,7 @@ function buildMasterKit() {
     Sfx.play(el === 'ice' ? 'water' : el);
   } });
   // ---- skill 2 (shared slot m2)
-  def('m2', { slot: 'm2', el: 'fire', anim: 'push', dur: .6, rel: .25, cd: MM.s2.cd, cost: MM.s2.cost, energy: true, fn(f, t) {
+  def('m2', { slot: 'm2', el: 'fire', anim: 'push', clip: 'magic2h', speed: 2, hit: .25, dur: .6, rel: .25, cd: MM.s2.cd, cost: MM.s2.cost, energy: true, fn(f, t) {
     const el = f.melEl, cid = f.castId, S = (o) => Object.assign({ skill: true, castId: cid, seal: el }, o);
     if (el === 'fire') { for (let k = 1; k <= 3; k++) fb('fire_wall', { pos: f.pos.clone().addScaledVector(fwdOf(f), k * 1.5).setY(f.pos.y + 1.1), size: [2 + k * .5, 1.6], mode: 'up', speed: 1.6, boost: 1.1 }); coneHit(f, t, 5, .75, 105, S({ kb: 3, el, heavy: true })); }
     else if (el === 'water') { const p = spawnWave(f, t, S({ el: 'water', speed: 14, width: 3.4, height: 1.1, dmg: 85, kb: 8, launch: 0, life: 1.4, vis: 'water', push: true })); p.fbh = [fb('water_wave', { follow: () => p.dead ? null : p.pos, off: new V3(0, 1.1, 0), size: 3.2, loop: true })]; }
@@ -1897,7 +1953,7 @@ function buildMasterKit() {
     Sfx.play(el === 'ice' ? 'water' : el);
   } });
   // ---- fusion (slot mf) — needs a stored seal + a different current element
-  def('mfuse', { slot: 'mf', el: 'fire', anim: 'burst', dur: .7, rel: .3, cd: 14, cost: MM.fuse.cost, energy: true, power: 2, fn(f, t) {
+  def('mfuse', { slot: 'mf', el: 'fire', anim: 'burst', clip: 'magic_area', speed: 2, hit: .3, dur: .7, rel: .3, cd: MM.fuse.cd, cost: MM.fuse.cost, energy: true, power: 2, fn(f, t) {
     const pair = f.pendingFuse; if (!pair) return; const [a, b] = pair; const key = fuseKey(a, b); const cid = f.castId, S = (o) => Object.assign({ skill: true, castId: cid }, o);
     popText(f.pos.clone().setY(f.pos.y + 2.6), FUSE[key].toUpperCase(), '#ffe9a0', 22); Sfx.play('chain');
     const fw = fwdOf(f);
@@ -1920,10 +1976,10 @@ function buildMasterKit() {
       case 'lightning+wind': { const d = _v1.copy(t.pos).sub(f.pos).setY(0).normalize(); f.startDash(d, BAL.dashSpeed * 1.25, .3, 'lightning'); f.dashAttack = { dmg: 110, el: 'lightning', hit: false, castId: cid }; break; }
       case 'ice+lightning': spawnBall(f, t, S({ el: 'ice', pos: frontPos(f, .9, 1.3), speed: 38, radius: .45, dmg: 85, kb: 1, vis: 'ice_needle', root: .7, trail: 'lightning_orb', trailSize: .9 })); break;
     }
-    f.pendingFuse = null; f.seal = null;
+    f.seal = null;
   } });
   // ---- super
-  def('m_su', { el: 'wind', anim: 'ult', clip: null, dur: MM.su.warn + 1.3, rel: MM.su.warn, cd: 1, super: true, power: 3, label: MM.su.name, noMove: true,
+  def('m_su', { el: 'wind', anim: 'ult', clip: 'magic2h3', speed: 1.4, dur: MM.su.warn + 1.3, rel: MM.su.warn, cd: 1, super: true, power: 3, label: MM.su.name, noMove: true,
     onStart(f, t) { f.suP = aimPoint(f, t, .3); telegraph(f.suP, MM.su.radius, 0xffe9a0, MM.su.warn); },
     fn(f, t) { const P = f.suP, cid = f.castId, R = MM.su.radius;
       const stage = (i, fx) => later(i * .5, () => { if (game.state !== 'fight' && game.state !== 'ko') return; fx(); Sfx.play(i === 2 ? 'explode' : i === 1 ? 'wind' : 'earth'); shake(.4 + i * .2); for (const T of opps(f)) if (!T.ghost() && Math.hypot(T.pos.x - P.x, T.pos.z - P.z) < R && T.pos.y - P.y < 3) applyHit(f, T, { dmg: MM.su.waves[i], kb: i === 2 ? 9 : 2, el: ['earth', 'ice', 'fire'][i], from: P, heavy: i === 2, skill: true, castId: cid, multi: i < 2, push: i === 2 }); });
@@ -1932,9 +1988,10 @@ function buildMasterKit() {
       stage(2, () => { fb('explosion', { pos: P.clone().setY(P.y + 2.2), size: 7.5 }); fb('bolt_branch', { pos: P.clone().setY(P.y + 3), size: [4, 7], mode: 'up', speed: 1.7, boost: 1.3 }); fb('fire_ring', { pos: P.clone().setY(P.y + .12), size: 8 }); flashSky(); });
     } });
 }
-buildKits(); buildKazanKit(); buildRakanKit(); buildBasics(); buildSiraKit(); buildRaynKit(); buildMasterKit();
+buildKits(); buildKazanKit(); buildRakanKit(); buildBasics(); buildSiraKit(); buildRaynKit(); buildMasterKit(); buildMasterBasics(); buildBladeBasics();
 // ---------------------------------------------------------------- HIT RESOLUTION
 function applyHit(att, tgt, h) {
+  if (att && att.isMaster && h && h.dmg && !h._mm) { h = Object.assign({}, h, { dmg: h.dmg * (MM.dmgMul || 1), _mm: 1 }); }
   if (tgt.invuln > 0 || tgt.state === 'ko' || (game.state !== 'fight' && game.state !== 'ko')) return 'miss';
   const from = h.from || att.pos;
   _v1.copy(from).sub(tgt.pos).setY(0).normalize();
@@ -1988,7 +2045,7 @@ function applyHit(att, tgt, h) {
   if (h.freeze && ccFree) { stunT = Math.max(stunT, .7); tgt.sts.ccImm = 2.7; fb('ice_spike', { pos: tgt.pos.clone().setY(tgt.pos.y + .1), size: [2, 2.2], mode: 'up', speed: 1.6 }); popText(hitPos.clone().setY(hitPos.y + .8), 'FROZEN!', '#bfe9ff', 22); }
   if (h.root && ccFree) { tgt.sts.root = h.root; tgt.sts.ccImm = 2 + h.root; popText(hitPos.clone().setY(hitPos.y + .8), 'BOUND!', '#d8ccff', 20); for (let i = 0; i < 4; i++) boltFX(tgt.pos.clone().setY(tgt.pos.y + .2), tgt.pos.clone().setY(tgt.pos.y + 1.6).add(_v3.randomDirection().multiplyScalar(.5)), 0xd0c4ff, .05, .3); }
   if (stunT) tgt.shockT = Math.max(tgt.shockT || 0, stunT), h.stun = stunT;
-  if (h.seal && att.charId === 'master' && h.castId && att.sealCast !== h.castId) { att.sealCast = h.castId; mSeal(att, h.seal); att.pendingFuse = att.seal && att.seal.el !== att.melEl ? [att.seal.el, att.melEl] : null; }
+  if (false && h.seal && att.charId === 'master' && h.castId && att.sealCast !== h.castId) { att.sealCast = h.castId; mSeal(att, h.seal); att.pendingFuse = att.seal && att.seal.el !== att.melEl ? [att.seal.el, att.melEl] : null; }
   if (h.wet && att.charId === 'sira') siraMark(att, tgt);
   FX.sparks(hitPos, EL[h.el || 'fire'].c, h.heavy ? 22 : 12, h.heavy ? 9 : 6); if (h.heavy) FX.shock(hitPos, h.el || 'fire', 1);
   if (!h.proj && !h.multi) impactFX(h.el || 'fire', hitPos, h.heavy, .8);
@@ -2051,23 +2108,40 @@ const SWORDS = {}, SWORD_FOR = { sira: 'ice', rayn: 'fire' };
 function loadSword(kind) { if (SWORDS[kind]) return Promise.resolve(); return new Promise(res => newGLTF().load(`assets/sword_${kind}.glb`, g => {
   g.scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
   const box = new THREE.Box3().setFromObject(g.scene), size = box.getSize(new V3()), c = box.getCenter(new V3());
-  const k = 2 / Math.max(1e-6, size.y); // bake to a -1..1 blade along +Y whatever the file's node scales are
+  const k = 2 / Math.max(1e-6, size.y); // bake to a -1..1 sword along +Y whatever the file's node scales are
   const w = new THREE.Group(); g.scene.scale.multiplyScalar(k); g.scene.position.set(-c.x * k, -c.y * k, -c.z * k); w.add(g.scene);
-  SWORDS[kind] = w; res();
+  w.userData.info = swordInfo(w); SWORDS[kind] = w; res();
 }, undefined, () => res())); }
-const SWORD_FIT = { ice: { pos: [0, .03, .01], rot: [180, 0, 0], len: 1.08, flip: 1, grip: .12 }, fire: { pos: [0, .03, .01], rot: [180, 0, 0], len: 1.32, flip: 1, grip: .1 } };
+function swordInfo(root) { // find where the guard is (widest slice) -> the short side of it is the handle; and which axis is the blade's width
+  root.updateMatrixWorld(true); const N = 48, wx = new Float32Array(N), wz = new Float32Array(N), mnx = [], mxx = [], mnz = [], mxz = []; for (let i = 0; i < N; i++) { mnx[i] = mnz[i] = 9; mxx[i] = mxz[i] = -9; }
+  const v = new V3();
+  root.traverse(o => { if (!o.isMesh) return; const P = o.geometry.attributes.position, st = Math.max(1, Math.floor(P.count / 20000));
+    for (let i = 0; i < P.count; i += st) { v.fromBufferAttribute(P, i).applyMatrix4(o.matrixWorld); const b = Math.max(0, Math.min(N - 1, Math.floor((v.y + 1) / 2 * N))); mnx[b] = Math.min(mnx[b], v.x); mxx[b] = Math.max(mxx[b], v.x); mnz[b] = Math.min(mnz[b], v.z); mxz[b] = Math.max(mxz[b], v.z); } });
+  let gi = 0, gw = 0; for (let i = 0; i < N; i++) { wx[i] = Math.max(0, mxx[i] - mnx[i]); wz[i] = Math.max(0, mxz[i] - mnz[i]); const wd = Math.max(wx[i], wz[i]); if (wd > gw) { gw = wd; gi = i; } }
+  const flip = gi > N / 2; // guard in the upper half -> handle is on top -> turn the sword over
+  const guardY = ((flip ? N - 1 - gi : gi) + .5) / N * 2 - 1; // guard position once the handle is at -1
+  let sx = 0, sz = 0; for (let i = 0; i < N; i++) { const j = flip ? N - 1 - i : i; const y = (i + .5) / N * 2 - 1; if (y > guardY + .25 && y < .7) { sx += wx[j]; sz += wz[j]; } }
+  return { flip, gripY: (-1 + guardY) / 2, wide: sx >= sz ? 'x' : 'z', guardY };
+}
+const SWORD_FIT = { ice: { len: 1.05 }, fire: { len: 1.3 } };
 function attachSword(R, id) {
   const kind = SWORD_FOR[id]; if (!kind) return;
-  const put = () => { const b = R.glb.b.RightHand; if (!b || R.glb.sword) return;
-    R.model ? 0 : 0; R.root.updateMatrixWorld(true);
-    const F = SWORD_FIT[kind], ws = b.getWorldScale(new V3()).x || 1;
-    const holder = new THREE.Group(); const g = SWORDS[kind].clone(true);
-    if (F.flip) g.rotation.z = Math.PI; // some models come grip-up: turn them so the handle sits in the hand
-    g.position.y = 1 - (F.grip || 0) * 2; // sink the hand onto the handle instead of the pommel tip
+  const put = () => { const G = R.glb, hb = G.b.RightHand; if (!hb || G.sword || !SWORDS[kind]) return;
+    R.root.updateMatrixWorld(true);
+    const ix = G.model.getObjectByName('mixamorigRightHandIndex1');
+    const F = SWORD_FIT[kind], info = SWORDS[kind].userData.info, ws = hb.getWorldScale(new V3()).x || 1;
+    const holder = new THREE.Group(), g = SWORDS[kind].clone(true);
+    if (info.flip) g.rotation.z = Math.PI; // handle down
+    g.position.y = -info.gripY; // middle of the handle sits in the fist
     holder.add(g);
+    // calibrated on the sword animations: the blade leaves the fist along the hand bone's -Z (upright in Rayn's great-sword idle,
+    // outward in every slash); the edge faces the knuckles (+Y)
+    const a = new V3(0, 0, -1), f = new V3(0, 1, 0), m = new THREE.Matrix4();
+    if (info.wide === 'x') m.makeBasis(f, a, new V3().crossVectors(f, a)); else m.makeBasis(new V3().crossVectors(a, f), a, f);
+    holder.quaternion.setFromRotationMatrix(m);
+    if (ix) holder.position.copy(ix.position).multiplyScalar(.72); // inside the fist, just short of the knuckles
     holder.scale.setScalar(F.len / 2 / Math.max(1e-6, ws));
-    holder.position.set(...F.pos); holder.rotation.set(F.rot[0] * Math.PI / 180, F.rot[1] * Math.PI / 180, F.rot[2] * Math.PI / 180);
-    b.add(holder); R.glb.sword = holder; };
+    hb.add(holder); G.sword = holder; G.swordTipLocal = new V3(0, 1 - info.gripY, 0); };
   if (SWORDS[kind]) put(); else loadSword(kind).then(put);
 }
 const gmeta = G => CHAR_META[G.id] || {};
@@ -2183,7 +2257,7 @@ class Fighter {
     this.blockStyle = o.blockStyle || (o.isMaster ? 'all' : o.el);
     this.rig = buildRig(o.isMaster ? 'hero' : 'raven', o.el ? EL[o.el].color : 0xffffff, o.el, o.variant || 'a');
     if (o.dummy) { this.isDummy = true; this.rig.root.traverse(m => { if (m.isMesh || m.isSprite || m.isPoints) m.visible = false; }); this.rig.root.add(this.dummyMesh = buildDummy()); this.wob = 0; this.wobV = 0; this.lastHitId = 0; }
-    else if (!o.isMaster && CHAR_GLB[o.char || 'raven']) attachRavenGLB(this.rig, o.el, o.variant || 'a', o.char || 'raven');
+    else if (CHAR_GLB[o.isMaster ? 'master' : (o.char || 'raven')]) attachRavenGLB(this.rig, o.isMaster ? null : o.el, o.variant || 'a', o.isMaster ? 'master' : (o.char || 'raven'));
     this.charId = o.dummy ? 'dummy' : o.isMaster ? 'master' : (o.char || 'raven');
     const CS = BAL.chars[this.charId] || BAL.chars.raven; this.maxHp = CS.hp; this.dashMax = CS.dashCD; this.comboDmg = CS.combo; this.dashMul = CS.dashMul || 1;
     if (this.charId === 'kazan' && this.rig.glb) { const b = this.rig.glb.b; this.heatGlow = [b.LeftForeArm, b.LeftHand, b.RightHand].filter(Boolean).map((bn, i) => { this.rig.root.updateMatrixWorld(true); const ws = bn.getWorldScale(new V3()).x || 1; const g = glowSprite(0xff5a10, (i === 1 ? .6 : .45) / ws, 0); g.material.opacity = 0; bn.add(g); return g; }); }
@@ -2217,10 +2291,10 @@ class Fighter {
   canCast() { return ['idle', 'air', 'block'].includes(this.state); }
   useAbility(name, opp, force = false) {
     const a = AB[name]; if (!a) return false;
-    const cdKey = a.slot || name;
+    const cdKey = cdKeyOf(this, name);
     if ((this.cds[cdKey] || 0) > 0) return false;
-    if (this.seal) this.pendingFuse = this.seal.el !== this.melEl ? [this.seal.el, this.melEl] : this.pendingFuse;
-    if (name === 'mfuse' && (!this.pendingFuse || !this.seal || game.time > this.seal.until)) { if (this.isPlayer) btnDenied('mfuse'); return false; }
+    if (this.isMaster) this.pendingFuse = this.prevEl && this.prevEl !== this.melEl ? [this.prevEl, this.melEl] : null;
+    if (name === 'mfuse' && !this.pendingFuse) { if (this.isPlayer) { btnDenied('mfuse'); popText(this.pos.clone().setY(this.pos.y + 2.3), 'SWITCH ELEMENT FIRST', '#ffe9a0', 16); } return false; }
     if (!this.canCast() && !(force && this.state === 'cast' && this.cast && this.cast.fired)) return false;
     if ((this.useEnergy ? a.cost && this.mana < a.cost : !CFG.UNLIMITED_MANA && this.mana < a.cost)) { if (this.useEnergy) btnDenied(name); popText(this.pos.clone().setY(this.pos.y + 2.2), 'Not enough mana', '#8fd0ff', 18); return false; }
     if ((a.ult || a.super) && this.spirit < 100) return false;
@@ -2260,6 +2334,9 @@ class Fighter {
     this.pressElement(els[els.length - 1], opp);
   }
   update(dt, opp) {
+    if (this.isMaster && this.intent && this.state !== 'ko' && this.state !== 'down') { const I = this.intent; // switching element works in any state (buffered to the next free frame by swapCd only)
+      if (I.ability === 'mswap') { I.ability = null; if (this.swapCd <= 0) this.setElement6(ELS6[(ELS6.indexOf(this.melEl) + 1) % 6]); }
+      else if (I.ability && I.ability.startsWith && I.ability.startsWith('msel:')) { const e = I.ability.slice(5); I.ability = null; if (this.swapCd <= 0 && e !== this.melEl) this.setElement6(e); } }
     if (this.isDummy) return this.updateDummy(dt);
     if (this.freezeT > 0) { this.freezeT -= dt; this.animate(dt * .15, opp); return; }
     const I = this.intent; this.st += dt;
@@ -2289,7 +2366,7 @@ class Fighter {
     const mvx = canControl ? I.mx : 0, mvz = canControl ? I.mz : 0;
     switch (this.state) {
       case 'idle': case 'air': case 'block': {
-        if (canControl && I.block && this.onGround) { if (this.state !== 'block') { this.setState('block'); this.blockStart = game.time; this.rig.shield.visible = true; this.onBlockStart(opp); } }
+        if (canControl && I.block && this.onGround) { if (this.state !== 'block') { this.setState('block'); this.blockStart = game.time; this.rig.shield.visible = !['blade', 'all'].includes(this.blockStyle); this.onBlockStart(opp); } }
         else if (this.state === 'block') { this.setState(this.onGround ? 'idle' : 'air'); this.rig.shield.visible = false; }
         if (!canControl) break;
         if (this.state !== 'block') { const sp = this.speed * slow * haste * (this.onGround ? 1 : .85), inp = mvx * mvx + mvz * mvz > .01, k = this.onGround ? (inp ? BAL.accel : BAL.decel) : 4; this.vel.x = damp(this.vel.x, mvx * sp, k, dt); this.vel.z = damp(this.vel.z, mvz * sp, k, dt); if (!inp && this.onGround && Math.hypot(this.vel.x, this.vel.z) < .25) { this.vel.x = 0; this.vel.z = 0; } }
@@ -2402,8 +2479,9 @@ class Fighter {
   }
   animate(dt, opp) { if (this.isDummy) return; return this.animate2(dt, opp); }
   setElement6(e) {
+    if (e !== this.melEl) this.prevEl = this.melEl;
     this.melEl = e; this.swapCd = MM.swapGap; this.lastEl = e === 'ice' ? 'water' : e;
-    this.pendingFuse = this.seal && this.seal.el !== e && game.time < this.seal.until ? [this.seal.el, e] : null;
+    this.pendingFuse = this.prevEl && this.prevEl !== e ? [this.prevEl, e] : null;
     FX.burst(this.pos.clone().setY(this.pos.y + 1), e === 'ice' ? 'water' : e, 14, 3, .9); Sfx.play('select'); if (this.isPlayer) popText(this.pos.clone().setY(this.pos.y + 2.4), EL[e].name.toUpperCase(), '#' + new THREE.Color(EL[e].color).getHexString(), 19);
   }
   startMelee(i) { if (i === 0 && game.time - this.mchainT > BAL.comboReset) this.mchain = 0; this.melee = { i, done: false, queued: false };
@@ -2656,14 +2734,14 @@ class AI {
     const opening = ['down', 'getup', 'hit'].includes(tgt.state) || (tgt.state === 'cast' && tgt.cast && tgt.cast.fired) || tgt.state === 'block' && false;
     const aggr = D.aggr * this.mood * (opening ? 1.5 : 1);
     if (f.isMaster) {
-      if (f.seal && f.pendingFuse && (f.cds.mf || 0) <= 0 && f.mana >= 35 && Math.random() < aggr * .7) { I.ability = 'mfuse'; return; }
-      if (f.seal && f.seal.el === f.melEl && f.swapCd <= 0 && Math.random() < .5) { f.setElement6(pick(ELS6.filter(e => e !== f.melEl))); }
-      else if (!f.seal && f.swapCd <= 0 && Math.random() < .12) f.setElement6(pick(ELS6));
+      if (f.prevEl && f.prevEl !== f.melEl && (f.cds.mf || 0) <= 0 && dist < 13 && Math.random() < aggr * .35) { I.ability = 'mfuse'; return; }
+      const spent = (f.cds['m1_' + f.melEl] || 0) > 0 && (f.cds['m2_' + f.melEl] || 0) > 0;
+      if (f.swapCd <= 0 && (spent ? Math.random() < .6 : Math.random() < .05)) { const fresh = ELS6.filter(e => e !== f.melEl && !(f.cds['m1_' + e] > 0)); f.setElement6(pick(fresh.length ? fresh : ELS6.filter(e => e !== f.melEl))); }
     }
     if (f.spirit >= 100 && !blocked && dist >= K.superR[0] && dist <= K.superR[1] && Math.random() < aggr * .6) { I.ult = true; return; }
     if (dist < 2.1 && f.onGround && Math.random() < aggr) { I.melee = true; this.meleeChain = Math.random() < D.follow ? 2 : Math.random() < .5 ? 1 : 0; return; }
     if (!blocked && this.pace <= 0 && Math.random() < aggr) {
-      const opts = K.moves.filter(m => dist >= m[3] && dist <= m[4] && (f.cds[(AB[m[0]] && AB[m[0]].slot) || m[0]] || 0) <= 0);
+      const opts = K.moves.filter(m => dist >= m[3] && dist <= m[4] && (f.cds[cdKeyOf(f, m[0])] || 0) <= 0 && (m[0] !== 'mfuse' || (f.prevEl && f.prevEl !== f.melEl)));
       if (opts.length) { let r = Math.random() * opts.reduce((s, m) => s + m[2], 0); for (const m of opts) { r -= m[2]; if (r <= 0) { I.ability = m[0]; this.pace = m[1] * rand(.8, 1.6) / D.aggr; if (m[0] === K.basic) this.chainLeft = Math.random() < D.follow ? 2 : Math.random() < .5 ? 1 : 0; return; } } }
     }
     // 3) movement: keep the element's preferred range, circle, use cover
@@ -2698,7 +2776,7 @@ function readPlayerIntent() {
   I.jump = P('Space'); I.jumpHeld = !!KEYS.Space || !!TOUCH.btn.Space;
   I.dash = P('ShiftLeft') || P('ShiftRight'); I.melee = P('KeyJ'); I.block = !!KEYS.KeyK || !!TOUCH.btn.KeyK; I.ult = P('KeyE');
   I.elems = []; I.ability = null;
-  if (hero.isMaster) { if (P('KeyU')) I.ability = 'mswap'; ELS6.forEach((e, k) => { if (P('Digit' + (k + 1))) I.ability = 'msel:' + e; }); if (P('KeyI')) I.ability = 'm1'; if (P('KeyO')) I.ability = 'm2'; if (P('KeyP')) I.ability = 'mfuse'; }
+  if (hero.isMaster) { if (P('KeyU')) I.ability = 'mb'; if (P('KeyL') || P('KeyQ')) I.ability = 'mswap'; ELS6.forEach((e, k) => { if (P('Digit' + (k + 1))) I.ability = 'msel:' + e; }); if (P('KeyI')) I.ability = 'm1'; if (P('KeyO')) I.ability = 'm2'; if (P('KeyP')) I.ability = 'mfuse'; }
   else { RAVEN_KEYS.forEach(([k, d], i) => { if (P(k) || P(d)) I.ability = hero.kit.btn[i][0]; }); }
 }
 const TBTN = {}, KSLOT = {};
@@ -2707,10 +2785,11 @@ function ctrlDefs() {
   const el = hero.el, K = hero.kit, kz = hero.charId === 'kazan', rk = hero.charId === 'rakan';
   if (hero.isMaster) return [
     { code: 'KeyJ', key: 'J', icon: 'sk_fist', kind: 'melee', name: 'Combo' },
-    { code: 'KeyU', key: 'U', icon: 'ic_fire', kind: 'swap', ab: null, name: 'Switch element (1-6 direct)' },
-    { code: 'KeyI', key: 'I', icon: 'sk_fire', ab: 'm1', kind: 'mskill', name: 'Skill 1 (15 energy)', tag: '1' },
-    { code: 'KeyO', key: 'O', icon: 'sk_fire', ab: 'm2', kind: 'mskill', name: 'Skill 2 (25 energy)', tag: '2' },
-    { code: 'KeyP', key: 'P', icon: 'sk_super', ab: 'mfuse', kind: 'fuse', name: 'Fusion (seal + 35 energy)' },
+    { code: 'KeyU', key: 'U', icon: 'ic_fire', ab: 'mb', kind: 'basic', name: 'Element attack (tap ×3 — 3rd is a fusion shot)' },
+    { code: 'KeyL', key: 'L', icon: 'ic_water', kind: 'swap', ab: null, name: 'Switch element (1-6 direct)' },
+    { code: 'KeyI', key: 'I', icon: 'sk_fire', ab: 'm1', kind: 'mskill', name: 'Skill 1 (own cooldown per element)', tag: '1' },
+    { code: 'KeyO', key: 'O', icon: 'sk_fire', ab: 'm2', kind: 'mskill', name: 'Skill 2 (own cooldown per element)', tag: '2' },
+    { code: 'KeyP', key: 'P', icon: 'sk_super', ab: 'mfuse', kind: 'fuse', name: 'Fusion (last two elements)' },
     { code: 'KeyE', key: 'E', icon: 'sk_super', kind: 'super', ab: 'm_su', name: 'Super' },
     { code: 'ShiftLeft', key: 'Shift', icon: 'sk_dash', kind: 'dash', name: 'Dash' },
     { code: 'KeyK', key: 'K', icon: null, kind: 'block', name: 'Block' },
@@ -2718,7 +2797,7 @@ function ctrlDefs() {
   ];
   return [
     { code: 'KeyJ', key: 'J', icon: 'sk_fist', kind: 'melee', name: 'Combo' },
-    { code: 'KeyU', key: 'U', icon: kz ? 'sk_fire' : 'ic_' + el, ab: K.btn[0][0], kind: 'basic', name: K.btn[0][1] + ' (tap ×3)' },
+    { code: 'KeyU', key: 'U', icon: kz ? 'sk_fire' : hero.charId === 'sira' ? 'ic_ice' : 'ic_' + el, ab: K.btn[0][0], kind: 'basic', name: K.btn[0][1] + ' (tap ×3)' },
     { code: 'KeyI', key: 'I', icon: kz ? 'sk_fire' : 'sk_' + el, ab: K.btn[1][0], name: K.btn[1][1], tag: '1' },
     { code: 'KeyO', key: 'O', icon: kz ? 'sk_earth' : rk ? 'sk_jump' : 'sk_' + el, ab: K.btn[2][0], name: K.btn[2][1], tag: '2' },
     { code: 'KeyE', key: 'E', icon: 'sk_super', kind: 'super', ab: K.superAb, name: 'Super' },
@@ -2728,7 +2807,7 @@ function ctrlDefs() {
   ];
 }
 // [right, bottom, size] in px from the bottom-right corner (landscape phone)
-const TOUCH_LAYOUT = { KeyU: [18, 16, 98], KeyJ: [128, 12, 64], KeyI: [114, 88, 64], KeyO: [34, 126, 62], KeyE: [202, 50, 60], KeyK: [198, 124, 54], Space: [110, 166, 54], ShiftLeft: [36, 200, 52], KeyP: [262, 16, 56] };
+const TOUCH_LAYOUT = { KeyU: [18, 16, 98], KeyJ: [128, 12, 64], KeyI: [114, 88, 64], KeyO: [34, 126, 62], KeyE: [202, 50, 60], KeyK: [198, 124, 54], Space: [110, 166, 54], ShiftLeft: [36, 200, 52], KeyP: [262, 16, 56], KeyL: [272, 86, 58] };
 function slotEl(d, cls) {
   const b = document.createElement('div'); b.className = cls + (d.icon ? '' : ' shieldIc');
   if (d.icon) b.style.backgroundImage = ICON(d.icon);
@@ -2763,8 +2842,8 @@ function buildTouch() {
 }
 function slotState(d) {
   if (d.kind === 'swap') { const cd = Math.max(0, hero.swapCd); return [cd / MM.swapGap * 100, '', false]; }
-  if (d.kind === 'fuse') { const cd = hero.cds.mf || 0; const rdy = cd <= 0 && hero.pendingFuse && hero.seal; return [cd / 14 * 100, cd > 0 ? Math.ceil(cd) + '' : '', !!rdy]; }
-  if (d.kind === 'mskill') { const cd = hero.cds[d.ab === 'm1' ? 'm1' : 'm2'] || 0, base = d.ab === 'm1' ? MM.s1.cd : MM.s2.cd; return [cd / base * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
+  if (d.kind === 'fuse') { const cd = hero.cds.mf || 0; const rdy = cd <= 0 && hero.prevEl && hero.prevEl !== hero.melEl; return [cd / MM.fuse.cd * 100, cd > 0 ? Math.ceil(cd) + '' : '', !!rdy]; }
+  if (d.kind === 'mskill') { const cd = hero.cds[cdKeyOf(hero, d.ab)] || 0, base = d.ab === 'm1' ? MM.s1.cd : MM.s2.cd; return [cd / base * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
   if (d.kind === 'basic') { const st = hero.chainT > 0 && hero.chainEl === d.ab ? hero.comboStep : 0; return [0, '', false, st]; }
   if (d.ab && d.kind !== 'super') { const cd = hero.cds[d.ab] || 0; return [cd / AB[d.ab].cd * 100, cd > 0 ? Math.ceil(cd) + '' : '', false]; }
   if (d.kind === 'super') return [100 - hero.spirit, '', hero.spirit >= 100];
@@ -2773,7 +2852,8 @@ function slotState(d) {
 }
 function updateControls() {
   if (hero && hero.isMaster) { const ic = 'ic_' + (hero.melEl === 'lightning' ? 'lightning' : hero.melEl), sk = 'sk_' + (hero.melEl === 'ice' ? 'water' : hero.melEl);
-    for (const M of [TBTN, KSLOT]) { if (M.KeyU && M.KeyU._ic !== ic) { M.KeyU._ic = ic; M.KeyU.b.style.backgroundImage = ICON(ic); } for (const c of ['KeyI', 'KeyO']) if (M[c] && M[c]._ic !== sk) { M[c]._ic = sk; M[c].b.style.backgroundImage = ICON(sk); } } }
+    const nx = ELS6[(ELS6.indexOf(hero.melEl) + 1) % 6], icn = 'ic_' + nx;
+    for (const M of [TBTN, KSLOT]) { if (M.KeyU && M.KeyU._ic !== ic) { M.KeyU._ic = ic; M.KeyU.b.style.backgroundImage = ICON(ic); } if (M.KeyL && M.KeyL._ic !== icn) { M.KeyL._ic = icn; M.KeyL.b.style.backgroundImage = ICON(icn); } for (const c of ['KeyI', 'KeyO']) if (M[c] && M[c]._ic !== sk) { M[c]._ic = sk; M[c].b.style.backgroundImage = ICON(sk); } } }
   for (const M of [TBTN, KSLOT]) for (const c in M) {
     const d = M[c], b = d.b; const [p, tx, rdy] = slotState(d); const pp = Math.round(p);
     if (pp !== b._p) { b._p = pp; b._cd.style.setProperty('--p', pp + '%'); }
@@ -2934,9 +3014,9 @@ const START_H = new V3(0, 0, 11), START_E = new V3(0, 0, -11);
 const fighterLabel = f => f.isDummy ? 'Training Dummy' : f.isMaster ? 'Elemental Master' : f.charId === 'kazan' ? 'Kazan · Magma' : f.charId === 'rakan' ? 'Rakan · Stone' : f.charId === 'sira' ? 'Sira · Frost' : f.charId === 'rayn' ? 'Rayn · Flame' : `Raven · ${EL[f.el].name}`;
 function makeFighter(sel, isPlayer, variant) {
   if (sel.char === 'dummy') return new Fighter({ name: 'Training Dummy', dummy: true, el: 'earth', kit: RAVEN_KITS.earth });
-  if (sel.char === 'master') { const K = MASTER_KIT; const f = new Fighter({ name: 'Elemental Master', char: 'master', isMaster: true, isPlayer, kit: K, speed: K.speed, airJumps: 1, glide: true, variant }); f.useEnergy = true; f.melEl = 'fire'; f.spD = MM.spD; f.spT = MM.spT; return f; }
+  if (sel.char === 'master') { const K = MASTER_KIT; const f = new Fighter({ name: 'Elemental Master', char: 'master', isMaster: true, isPlayer, kit: K, speed: K.speed, airJumps: 1, glide: true, variant }); f.useEnergy = false; f.melEl = 'fire'; f.prevEl = null; f.maxHp = f.hp = MM.hp; f.spD = MM.spD; f.spT = MM.spT; return f; }
   if (sel.char === 'sira') { const K = SIRA_KIT; const f = new Fighter({ name: 'Sira', char: 'sira', isMaster: false, isPlayer, el: 'water', blockStyle: 'frost', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); f.comboSpd = BAL.chars.sira.comboSpd; return f; }
-  if (sel.char === 'rayn') { const K = RAYN_KIT; return new Fighter({ name: 'Rayn', char: 'rayn', isMaster: false, isPlayer, el: 'fire', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
+  if (sel.char === 'rayn') { const K = RAYN_KIT; return new Fighter({ name: 'Rayn', char: 'rayn', isMaster: false, isPlayer, el: 'fire', blockStyle: 'blade', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
   if (sel.char === 'rakan') { const K = RAKAN_KIT; return new Fighter({ name: 'Rakan', char: 'rakan', isMaster: false, isPlayer, el: 'earth', blockStyle: 'stone', kit: K, speed: K.speed, armor: 1, airJumps: 0, glide: false, heal: 0, variant }); }
   if (sel.char === 'kazan') { const K = KAZAN_KIT; return new Fighter({ name: 'Kazan', char: 'kazan', isMaster: false, isPlayer, el: 'fire', blockStyle: 'magma', kit: K, speed: K.speed, armor: 1, airJumps: 1, glide: false, heal: 0, variant }); }
   const K = RAVEN_KITS[sel.el]; return new Fighter({ name: 'Raven', char: 'raven', isMaster: false, isPlayer, el: sel.el, kit: K, speed: K.speed, armor: K.armor, airJumps: K.airJumps, glide: K.glide, heal: K.heal, variant });
@@ -3052,7 +3132,7 @@ function endMatch() {
 function tipFor(f) {
   if (f.charId === 'sira') return 'Sira is fast but fragile: block her Wave Slide, and when you are Wet expect the freezing Needle — dash sideways. One heavy combo of yours trades well against her.';
   if (f.charId === 'rayn') return 'Rayn wants his blade ignited: interrupt the ignition wind-up, and step out of the Sun Cleave line early. His crescents can be reflected.';
-  if (f.charId === 'master') return 'The Master is dangerous after a skill hit — that stores a seal for a fusion. Pressure him when his energy runs low, and dodge the warned lines and circles.';
+  if (f.charId === 'master') return 'The Master’s third normal shot is a fusion — block it. He switches element to get fresh skills, so the moment right after a switch is when he is most dangerous; close the gap while he recovers.';
   if (f.charId === 'rakan') return 'Rakan punishes close attacks: when he crosses his arms, WAIT — hitting him in that window gets you countered. His heavy swings are slow, so step back and answer after they miss.';
   if (f.charId === 'kazan') return 'Kazan’s skills have long wind-ups: watch for the red line or circle and step out sideways, then punish him while he recovers. Never stand in his lava.';
   return { fire: 'Inferno Blast shows a red circle first — dash out of it. Fire heals a little on skill hits, so trade with combos.', water: 'Don’t eat the 3rd combo hit: it soaks you (+10% damage taken). Jump over the Wave.', wind: 'Air Blade is fast but light — block it. Walk out of the Cyclone sideways, its pull is weak.', earth: 'Rock Shot is slow: dash sideways. Walk around the Stone Wall instead of shooting into it.', lightning: 'Break line of sight with pillars to stop Chain Lightning, and keep moving during Thunderstorm.' }[f.el] || 'Keep moving and block the big shots.';
@@ -3151,7 +3231,7 @@ function initLobby() {
   if (IS_TOUCH) buildTouch();
 }
 function ensureChars(ids) { // downloads any fighter that is not on the phone yet, with a visible progress bar
-  const need = [...new Set(ids)].filter(id => ['raven', 'kazan', 'rakan', 'sira', 'rayn'].includes(id) && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
+  const need = [...new Set(ids)].filter(id => ['raven', 'kazan', 'rakan', 'sira', 'rayn', 'master'].includes(id) && !CHAR_GLB[id]); if (!need.length) return Promise.resolve(true);
   const ov = $('#charLoad'); ov.classList.remove('hidden'); const pr = {}; const upd = () => { const v = need.reduce((a, id) => a + (pr[id] || 0), 0) / need.length; $('#charLoadBar').style.width = Math.round(v * 100) + '%'; $('#charLoadTxt').textContent = `Summoning ${need.map(n => n[0].toUpperCase() + n.slice(1)).join(' & ')}… ${Math.round(v * 100)}%`; };
   upd(); return Promise.all(need.map(id => loadCharGLB(id, p => { pr[id] = p; upd(); }))).then(r => { ov.classList.add('hidden'); if (r.includes(false)) { toast('Download failed — check your connection'); return false; } return true; });
 }
@@ -3185,6 +3265,7 @@ function renderLobby() {
   document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('sel', b.dataset.nav === LOBBY.nav));
   const ch = ROSTER.find(c => c.id === PROFILE.char);
   $('#heroName').innerHTML = ch.name.toUpperCase() + (ch.legendary ? '<span class="legend">LEGENDARY</span>' : '');
+  $('#heroName').classList.toggle('long', ch.name.length > 10);
   const he = $('#heroEl'), fixed = ch.fixedEl; he.querySelector('i').style.backgroundImage = elIcon(fixed ? CHAR_EL[ch.id][0] : PROFILE.el); he.querySelector('span').textContent = fixed ? CHAR_EL[ch.id][1] : EL[PROFILE.el].name.toUpperCase() + ' ELEMENT';
   he.style.borderColor = fixed ? '#ff7a2a' : '#' + new THREE.Color(EL[PROFILE.el].color).getHexString();
   const B = $('#sideBody'), F = $('#sideFoot'), H = $('#sideHead');
@@ -3272,13 +3353,14 @@ function renderTab() {
       <div class="perk"><b>PERK — BLADE EMBER:</b> ${RAYN_PERK_TEXT}</div>`;
   } else if (LOBBY.tab === 'details' && PROFILE.char === 'master') {
     P.innerHTML = `<h4>ELEMENTAL MASTER <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
-      <tr><td>Health</td><td>energy ${MM.energy.max}</td><td class="n">${BAL.chars.master.hp} · regen ${MM.energy.regen}/s</td></tr>
-      <tr><td>Elements</td><td>six</td><td class="n">🔥 💧 🪨 🌪️ ❄️ ⚡ — U switches, 1-6 direct</td></tr>
-      <tr><td>Skill 1</td><td>${MM.s1.cost} energy</td><td class="n">per element · ${MM.s1.cd}s shared</td></tr>
-      <tr><td>Skill 2</td><td>${MM.s2.cost} energy</td><td class="n">per element · ${MM.s2.cd}s shared</td></tr>
-      <tr><td>Fusion</td><td>${MM.fuse.cost} energy</td><td class="n">seal + different element · 15 combos · 14s</td></tr>
+      <tr><td>Health</td><td>no energy</td><td class="n">${BAL.chars.master.hp} · damage +${Math.round((MM.dmgMul - 1) * 100)}%</td></tr>
+      <tr><td>Element attack</td><td>tap ×3</td><td class="n">element · twin · <b>fusion shot</b> (current + previous)</td></tr>
+      <tr><td>Elements</td><td>six</td><td class="n">🔥 💧 🪨 🌪️ ❄️ ⚡ — L / small button switches, 1-6 direct</td></tr>
+      <tr><td>Skill 1</td><td>per element</td><td class="n">own cooldown for each element · ${MM.s1.cd}s</td></tr>
+      <tr><td>Skill 2</td><td>per element</td><td class="n">own cooldown for each element · ${MM.s2.cd}s</td></tr>
+      <tr><td>Fusion</td><td>P / ✦</td><td class="n">last two elements · 15 combos · ${MM.fuse.cd}s</td></tr>
       <tr><td>${MM.su.name}</td><td>Super</td><td class="n">${MM.su.waves.join(' + ')} = 230</td></tr></table>
-      <div class="perk"><b>HOW TO FUSE:</b> land a skill → its seal is stored 5 s → switch element → press <b>P</b> (the ✦ button on phone).</div>`;
+      <div class="perk"><b>HOW TO PLAY:</b> use an element's skills, switch element and its skills are ready again; the switch also loads your <b>fusion</b> with the element you just left.</div>`;
   } else if (LOBBY.tab === 'details' && PROFILE.char === 'rakan') {
     P.innerHTML = `<h4>RAKAN · STONE KIT <span class="legend sm">LEGENDARY</span></h4><table class="kitT">
       <tr><td>Health</td><td>giant</td><td class="n">${RK.hp} · −${Math.round(RK.baseDR * 100)}% damage taken</td></tr>
@@ -3412,7 +3494,7 @@ function frame(rdt) {
   setupComposer(); onResize();
   $('#loadTxt').textContent = 'Preparing fighters…'; $('#loadBar').style.width = '96%'; await new Promise(r => setTimeout(r, 30));
   initLobby(); toLobby(); window.__booted = true;
-  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan').then(() => loadCharGLB('rakan')).then(() => loadCharGLB('sira')).then(() => loadCharGLB('rayn')).then(() => loadSword('ice')).then(() => loadSword('fire')), 400)); // effects, then Kazan, download in the background while you are in the lobby
+  loadFlipbooks(() => { }).then(() => { window.__fxReady = true; }).then(() => setTimeout(() => loadCharGLB('kazan').then(() => loadCharGLB('rakan')).then(() => loadCharGLB('sira')).then(() => loadCharGLB('rayn')).then(() => loadCharGLB('master')).then(() => loadSword('ice')).then(() => loadSword('fire')), 400)); // effects, then Kazan, download in the background while you are in the lobby
   if (PROFILE.char !== 'raven') { const want = PROFILE.char; PROFILE.char = 'raven'; selectChar(want); }
   setupInstall();
   $('#loading').classList.add('hidden');
